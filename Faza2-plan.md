@@ -124,13 +124,26 @@ Kolone u CSV-u: `id, naslov, labela, podtip, napomena`. Anotacija upisuje
 .venv/bin/python annotator/app.py        # pokreni
 # otvori http://localhost:8000 ; Ctrl+C za stop
 ```
-- Prva stranica: izbor **FILIP** / **DANILO** + brojač progresa
-  (`Klikbejt: N`, `Nije klikbejt: N`, `Ukupno: N / 3214`; 3214 = 2×1607 svih klikova).
+- Prva stranica: izbor **FILIP** / **DANILO** + brojač progresa:
+  - `Klikbejt: N / 1100`, `Nije klikbejt: N / 1100` — **jedinstveni dataset** (samo
+    glavna polovine) → po ovome se odlučuje **rani prekid**.
+  - `Kalibracija (kappa): N / 220` — koliko unakrsnih (preklapajućih) je urađeno.
+  - Kad se dostigne 1100/1100: poruka „✅ Cilj dostignut — možeš stati".
 - Posle izbora: pitanje „Da li je ovaj naslov clickbait?", naslov veliko,
   dva dugmeta: **JESTE** (zeleno, =1), **NIJE** (crveno, =0).
 - Tastatura za brzinu: **→ / 1** = JESTE, **← / 0** = NIJE, **U** = nazad (undo).
 - **Redosled posluživanja:** prvo 220 kalibracionih (unakrsna 110 + vrh glavne 110),
   pa ostatak. Tako su kalibracioni naslovi prvih 220 → može IAA pre nego se nastavi.
+
+### Rani prekid (stop na 1100/1100)
+- Cilj skupa je 1100 klikbejt + 1100 regularnih. Brojač `Klikbejt/Nije /1100` prati
+  **jedinstvene** (glavna) naslove. **Čim se dostigne 1100/1100 — može se stati**,
+  ostatak se ne mora anotirati.
+- Zašto je bezbedno stati: kalibracija (220 preklapajućih) je **prvih 220 klikova**,
+  pa je kappa osigurana pre nego se uopšte priđe granici 1100/1100.
+- Preklapajući (oba anotiraju iste) naslovi su: `*_unakrsna.csv` (po 110) ↔ prvih
+  110 redova suprotnog `*_glavna.csv`. Posle prekida pokrenuti `build_dataset.py`
+  (uzima tačno 1100/1100).
 
 ### Rad iz više sesija (radi automatski)
 - Svaki klik se **odmah upisuje** u CSV. Pri pokretanju app **nastavlja od prvog

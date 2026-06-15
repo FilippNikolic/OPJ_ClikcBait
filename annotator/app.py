@@ -64,23 +64,38 @@ def counts(user):
     return total, done
 
 
+TARGET = 1100  # cilj po klasi za balansiran skup (1100 klikbejt + 1100 nije)
+
+
 def class_counts():
-    """Progres: broj klikbejt/nije kroz SVE datoteke (glavna + unakrsna),
-    tj. sve što je do sada klasifikovano — svaki klik se broji."""
+    """JEDINSTVENI dataset napredak — samo glavna polovine (kanonske labele).
+    Po ovome se odlučuje rani prekid na 1100/1100. Unakrsna se ne broji
+    (to su duplikati za kappa, ne novi naslovi)."""
     kb = ne = 0
     for usr in USER_FILES:
-        for p in USER_FILES[usr]:
-            for r in read_rows(p):
-                l = (r.get("labela") or "").strip()
-                if l == "1":
-                    kb += 1
-                elif l == "0":
-                    ne += 1
+        for r in read_rows(USER_FILES[usr][1]):  # [unakrsna, glavna] -> glavna
+            l = (r.get("labela") or "").strip()
+            if l == "1":
+                kb += 1
+            elif l == "0":
+                ne += 1
     return kb, ne
+
+
+def cal_counts():
+    """Napredak kalibracije (kappa): koliko unakrsnih naslova je anotirano."""
+    done = total = 0
+    for usr in USER_FILES:
+        for r in read_rows(USER_FILES[usr][0]):  # unakrsna
+            total += 1
+            if (r.get("labela") or "").strip() in ("0", "1"):
+                done += 1
+    return done, total
 
 
 def next_item(user):
     kb, ne = class_counts()
+    goal = kb >= TARGET and ne >= TARGET
     for p in USER_FILES[user]:
         for r in read_rows(p):
             if (r.get("labela") or "").strip() not in ("0", "1"):
@@ -92,10 +107,11 @@ def next_item(user):
                     "remaining": total - done,
                     "total": total,
                     "position": done + 1,
-                    "kb": kb, "ne": ne,
+                    "kb": kb, "ne": ne, "target": TARGET, "goal": goal,
                 }
     total, done = counts(user)
-    return {"done": True, "remaining": 0, "total": total, "kb": kb, "ne": ne}
+    return {"done": True, "remaining": 0, "total": total,
+            "kb": kb, "ne": ne, "target": TARGET, "goal": goal}
 
 
 def set_label(user, hid, value):
@@ -146,6 +162,10 @@ PAGE = """<!DOCTYPE html>
               border-radius:10px; text-align:center; font-size:1.3rem; line-height:1.9; }
   .progress b { font-size:1.6rem; }
   .progress .kb { color:#2d6a4f; } .progress .ne { color:#c0392b; }
+  .progress .cal { font-size:1rem; color:#777; margin-top:6px; }
+  .goalmsg { margin-top:10px; color:#2d6a4f; font-weight:700; font-size:1.15rem; }
+  .mini { text-align:center; color:#666; margin:-6px 0 16px; font-size:1rem; }
+  .mini .kb { color:#2d6a4f; } .mini .ne { color:#c0392b; }
   .hint { text-align:center; color:#888; margin-top:14px; font-size:.9rem; }
   .done { text-align:center; font-size:1.6rem; padding:60px 0; }
 </style></head>
@@ -164,9 +184,10 @@ async function showPick(){
      <button onclick="pick('danilo')">DANILO &nbsp;<small>(${s.danilo.remaining} preostalo)</small></button>
      </div>
      <div class="progress">
-       <div>Klikbejt: <b class="kb">${s.klasa.kb}</b></div>
-       <div>Nije klikbejt: <b class="ne">${s.klasa.ne}</b></div>
-       <div>Ukupno: <b>${s.klasa.ukupno}</b> / ${s.klasa.dataset}</div>
+       <div>Klikbejt: <b class="kb">${s.klasa.kb}</b> / ${s.klasa.target}</div>
+       <div>Nije klikbejt: <b class="ne">${s.klasa.ne}</b> / ${s.klasa.target}</div>
+       <div class="cal">Kalibracija (kappa): ${s.klasa.cal_done} / ${s.klasa.cal_total}</div>
+       ${s.klasa.goal ? '<div class="goalmsg">✅ Cilj 1100/1100 dostignut — možeš stati!</div>' : ''}
      </div>`;
 }
 function pick(u){ user=u; stack=[]; loadNext(); }
@@ -189,6 +210,7 @@ function render(){
         <span class="count">Preostalo: ${cur.remaining}</span>
         <a onclick="undo()" ${stack.length? '':'style="visibility:hidden"'}>&#8634; nazad (U)</a>
      </div>
+     <div class="mini">Klikbejt <b class="kb">${cur.kb}</b>/${cur.target} &nbsp;·&nbsp; Nije <b class="ne">${cur.ne}</b>/${cur.target}${cur.goal? ' &nbsp;✅ cilj dostignut — možeš stati' : ''}</div>
      <div class="pitanje">Da li je ovaj naslov clickbait?</div>
      <div class="card"><div class="naslov"></div></div>
      <div class="btns">
@@ -246,8 +268,10 @@ class Handler(BaseHTTPRequestHandler):
                     t, d = counts(usr)
                     out[usr] = {"total": t, "done": d, "remaining": t - d}
                 kb, ne = class_counts()
-                dataset = sum(len(read_rows(p)) for usr in USER_FILES for p in USER_FILES[usr])
-                out["klasa"] = {"kb": kb, "ne": ne, "ukupno": kb + ne, "dataset": dataset}
+                cal_d, cal_t = cal_counts()
+                out["klasa"] = {"kb": kb, "ne": ne, "target": TARGET,
+                                "cal_done": cal_d, "cal_total": cal_t,
+                                "goal": kb >= TARGET and ne >= TARGET}
             return self._send(200, json.dumps(out))
         if u.path == "/api/next":
             usr = parse_qs(u.query).get("user", [""])[0]
