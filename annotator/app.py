@@ -15,7 +15,6 @@ Pa otvori:  http://localhost:8000
 
 Kad zavrsis sa anotacijom, ceo folder annotator/ se moze obrisati — podaci
 ostaju u data/.
-hp_jp5LIIGIvfcO8BHTpN2GksVjFo1BQw0p6J6A
 """
 import csv
 import json
