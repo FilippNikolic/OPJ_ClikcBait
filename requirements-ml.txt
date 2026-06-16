@@ -1,0 +1,8 @@
+# Faza 3b — enkoderski LLM (BERTić + mBERT) fine-tuning. Zahteva GPU (≥8GB).
+# Pokretati na Google Colab / Azure. Vidi src/transformers/README.md.
+torch
+transformers>=4.40
+datasets
+scikit-learn>=1.3
+numpy
+accelerate

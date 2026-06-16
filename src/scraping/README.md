@@ -8,15 +8,12 @@ python3 -m venv .venv
 
 ## Bulk prikupljanje (preporučeno — daje hiljade odjednom)
 ```bash
-# SportKlub preko WordPress REST API-ja (~449k clanaka dostupno)
-.venv/bin/python src/scraping/sportklub_api.py --broj 1500
-
-# Mozzart preko enumeracije ID-eva clanaka (og:title)
-.venv/bin/python src/scraping/mozzart_bulk.py --broj 1500
+# SportKlub preko WordPress REST API-ja (~449k clanaka dostupno) — JEDINI izvor
+.venv/bin/python src/scraping/sportklub_api.py --broj 3000
 ```
-Sa po 1500 sirovih iz svakog izvora (=3000) ima dovoljno rezerve da posle
-anotacije i balansiranja izađe 2200 (1100 klikbejt + 1100 regularnih).
-**B92 nije potreban.**
+Iz SportKluba se skuplja višak (~3000 sirovih) da posle anotacije i
+balansiranja izađe 2200 (1100 klikbejt + 1100 regularnih).
+**Mozzart i B92 se ne koriste** (`mozzart_bulk.py` ostaje istorijski, ne pokretati).
 
 ## (Alternativa) Dnevni RSS snapshot
 ```bash
@@ -36,15 +33,16 @@ Snima `data/interim/headlines.csv` (spreman za anotaciju) i `data/metadata.csv`.
 ## Status izvora
 | Izvor | Metod | Status | Kapacitet |
 |---|---|---|---|
-| **SportKlub** | WP REST API (`/wp-json/wp/v2/posts`) | ✅ radi | ~449.000 članaka, sa rubrikom |
-| **Mozzart Sport** | enumeracija ID-eva (`og:title`) | ✅ radi | gusti sekvencijalni ID-jevi, bez rubrike |
-| B92 sport | — | ❌ **izbačen** (nema API/RSS, ne treba) | — |
+| **SportKlub** | WP REST API (`/wp-json/wp/v2/posts`) | ✅ **jedini izvor** | ~449.000 članaka, sa rubrikom |
+| Mozzart Sport | enumeracija ID-eva (`og:title`) | ❌ **odbačen** (kod ostaje, ne koristi se) | — |
+| B92 sport | — | ❌ **izbačen** (nema API/RSS) | — |
 
-> Dva izvora su dovoljna — broj izvora nije propisan postavkom. Domen
-> (sportske vesti) i klasni balans 1100/1100 su ono što je bitno.
+> Radimo sa **jednim izvorom (SportKlub)** — broj izvora nije propisan postavkom
+> (traži se *jedan domen*). Obe klase sa istog portala → model uči klikbejt signal,
+> a ne stil portala. Domen (sportske vesti) i balans 1100/1100 su ono što je bitno.
 
 ## Sledeći koraci u Fazi 1
-- [ ] Puni run: `sportklub_api.py --broj 1500` + `mozzart_bulk.py --broj 1500`
+- [ ] Puni run: `sportklub_api.py --broj 3000`
 - [ ] `merge.py` → proveriti da `data/interim/headlines.csv` ima ~3000 jedinstvenih
 - [ ] Ručno pregledati ~50 nasumičnih naslova (kontrola kvaliteta)
 - [ ] Predati `data/interim/headlines.csv` u Fazu 2 (anotacija)

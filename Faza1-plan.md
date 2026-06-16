@@ -1,9 +1,17 @@
 # Faza 1 — Prikupljanje podataka (detaljan plan)
 
-> Cilj: prikupiti **višak sirovih sportskih naslova (~3000–4000)** sa domaćih portala, očistiti i deduplikovati, i pripremiti ih za anotaciju (Faza 2). Finalni balansiran skup je 2200 (1100/1100), ali se balans finalizuje tek posle anotacije — zato sada skupljamo višak.
+> Cilj: prikupiti **višak sirovih sportskih naslova (~3000–4000)** sa SportKlub portala, očistiti i deduplikovati, i pripremiti ih za anotaciju (Faza 2). Finalni balansiran skup je 2200 (1100/1100), ali se balans finalizuje tek posle anotacije — zato sada skupljamo višak.
 
-**Izvori:** Mozzart Sport, Sport Klub, B92 (sport).
+**Izvor:** **SportKlub** (WP REST API, ~449k članaka). Mozzart i B92 odbačeni.
 **Izlaz faze:** `data/interim/headlines.csv` (deduplikovan) + `data/metadata.csv` + kratak izveštaj o prikupljanju.
+
+> ⚠️ **Odluka o jednom izvoru (izmena u odnosu na prijavu).** U prijavi profesoru
+> pomenuti su Mozzart Sport, Sport Klub i B92. Konačno radimo **samo sa SportKlub**.
+> Profesor je tražio *jedan tematski domen* (sportske vesti), ne broj izvora, a
+> postavka dozvoljava bilo koji javno dostupan sajt. **Obrazloženje:** obe klase
+> (klikbejt + regularan) dolaze sa istog portala → model uči stvarni klikbejt
+> signal, a ne stil portala. Ovo obavezno navesti u dokumentaciji (Faza 4) i
+> idealno kratko javiti profesoru.
 
 ---
 
@@ -40,7 +48,7 @@ Svaki red = jedan naslov. Polja:
 |---|---|---|
 | `id` | jedinstveni ID (npr. hash naslova ili redni broj) | `mz_000123` |
 | `naslov` | tekst naslova (raw, UTF-8) | `Šok u Humskoj!...` |
-| `izvor` | sajt | `mozzart` / `sportklub` / `b92` |
+| `izvor` | sajt | `sportklub` |
 | `url` | puni URL članka | `https://...` |
 | `datum` | datum objave (ako dostupan, ISO 8601) | `2026-06-10` |
 | `rubrika` | sport/podsekcija ako postoji | `fudbal` |
@@ -72,14 +80,14 @@ for e in feed.entries:
 - Izvući naslove iz kartica (`<h2>`, `<h3>`, `<a class="title">` — selektor zavisi od sajta).
 - **Proveriti da li je sadržaj u HTML-u ili se učitava JS-om** (DevTools → Network). Ako JS → `playwright`.
 
-### 3.3 Po izvoru (orijentaciono — selektore potvrditi na licu mesta)
+### 3.3 Izvor (SportKlub — jedini korišćeni)
 | Izvor | Pristup | Napomena |
 |---|---|---|
-| **Mozzart Sport** | listing po sportu + paginacija | velika količina, čist sportski sadržaj |
-| **Sport Klub** | listing/kategorije | proveriti JS rendering |
-| **B92 (sport)** | RSS + listing arhive | RSS verovatno postoji |
+| **SportKlub** | **WP REST API** (`sportklub.n1info.rs`) | ~449k članaka, čist sportski sadržaj; API daje naslov/URL/datum/rubriku bez HTML parsiranja |
 
-> Realna podela: Filip → Mozzart Sport; Danilo → Sport Klub + B92 (kako je u planu projekta).
+> Mozzart (`mozzart_bulk.py`) i B92 ostaju u kodu istorijski, ali se **ne koriste**.
+> Pošto je izvor jedan, scraping je zajednički task (oba člana razumeju ceo pipeline);
+> podela posla je na anotaciju i kasnije faze.
 
 ---
 
@@ -98,7 +106,7 @@ for e in feed.entries:
 
 Redosled koraka (`src/scraping/clean.py`):
 1. **Trim** whitespace, ukloniti višestruke razmake, newline u naslovu.
-2. Ukloniti **prefikse/sufikse portala** (npr. „ | Mozzart Sport", „- B92").
+2. Ukloniti **prefikse/sufikse portala** ako se pojave (npr. „ | SportKlub").
 3. Normalizovati navodnike/crtice (opciono — paziti da ne uništimo signal klikbejta!).
    - ⚠️ **Ne uklanjati uzvičnike, velika slova, emoji ovde** — to su potencijalni klikbejt signali; čuvati raw naslov, normalizaciju raditi tek u preprocessing-u Faze 3.
 4. **UTF-8** encoding na snimanju (eksplicitno `encoding="utf-8"`).

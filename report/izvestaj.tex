@@ -1,0 +1,135 @@
+% ============================================================================
+%  Detekcija klikbejt naslova u sportskim vestima na srpskom jeziku
+%  Projekat — Obrada prirodnih jezika 2025/2026 (ETF)
+%  Kompajliranje: pdflatex izvestaj && bibtex izvestaj && pdflatex x2
+%  (Overleaf: glavni fajl = izvestaj.tex, pdfLaTeX)
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[serbian]{babel}     % srpski, latinica
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{csquotes}
+
+\graphicspath{{figures/}}
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, urlcolor=blue}
+
+% bezbedno uključi tabelu/sliku i ako fajl još ne postoji
+\newcommand{\inputIfExists}[1]{\IfFileExists{#1}{\input{#1}}{\textit{[tabela se generiše: \texttt{#1}]}}}
+\newcommand{\figIfExists}[2]{\IfFileExists{figures/#1}{\includegraphics[width=#2]{#1}}{\fbox{\textit{[grafik se generiše: #1]}}}}
+
+\title{\textbf{Detekcija klikbejt naslova u sportskim vestima\\ na srpskom jeziku}}
+\author{Filip Nikolić (25/3234) \and Danilo Nikolić (25/3235)}
+\date{Obrada prirodnih jezika 2025/2026 --- Elektrotehnički fakultet}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+\noindent
+% TODO: 5--8 rečenica — zadatak, domen (sportske vesti, SportKlub), pristup
+% (baseline LR/NB, enkoderski BERTić/mBERT, dekoderski ChatGPT), ključni rezultat.
+Sažetak rada. Predstavljamo binarnu klasifikaciju klikbejt naspram regularnih
+sportskih naslova na srpskom jeziku\dots
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ===========================================================================
+\section{Uvod}\label{sec:uvod}
+% TODO: zadatak (binarna klasifikacija klikbejt/regularan), motivacija,
+% definicija klikbejta u sportskom domenu (kognitivni jaz, preuveličavanje,
+% emocionalni naboj, senzacionalističke fraze). Kratak pregled rada.
+
+\subsection{Definicija klikbejta}
+% prepisati suštinu iz annotation/guidelines.md
+
+% ===========================================================================
+\section{Faza 1 --- Prikupljanje podataka}\label{sec:faza1}
+% Izvor iz Faza1-plan.md. Radimo SAMO sa SportKlub (WP REST API).
+% TODO: izvor i kriterijumi, tehnika (REST API/scraping), polja metapodataka,
+% deduplikacija (egzaktna + near-duplicate), UTF-8, finalni broj naslova.
+
+% ===========================================================================
+\section{Faza 2 --- Anotacija podataka}\label{sec:faza2}
+% Iz Faza2-plan.md + annotation/guidelines.md.
+\subsection{Šema oznaka}
+% binarna 1/0 + opcioni pod-tipovi (KJ/PV/EN/SF)
+\subsection{Uputstvo za anotaciju}
+% definicije + granični slučajevi + primeri (iz guidelines.md)
+\subsection{Kalibracija i međuanotatorska saglasnost (IAA)}
+% kalibracioni skup (220), nezavisna anotacija, Cohen's kappa iz iaa.py
+% TODO: ubaciti finalni kappa i % slaganja
+\begin{table}[H]\centering
+\caption{Međuanotatorska saglasnost na kalibracionom skupu.}
+\begin{tabular}{lr}
+\toprule
+Mera & Vrednost \\
+\midrule
+Kalibracionih parova & TODO \\
+Procentualno slaganje & TODO\,\% \\
+Cohen's kappa & TODO \\
+\bottomrule
+\end{tabular}
+\end{table}
+\subsection{Glavna anotacija}
+% 50/50 podela, jednostruka anotacija, rešavanje spornih slučajeva
+
+% ===========================================================================
+\section{Deskriptivna statistika skupa}\label{sec:stat}
+% iz src/annotation/stats.py + src/report/make_figures.py
+\subsection{Raspodela klasa i dužina naslova}
+\begin{figure}[H]\centering
+\figIfExists{raspodela_klasa.png}{0.48\textwidth}\hfill
+\figIfExists{duzina_naslova.png}{0.48\textwidth}
+\caption{Levo: raspodela klasa. Desno: dužina naslova (reči) po klasi.}
+\end{figure}
+% TODO: komentar — balans 1100/1100, da li su klikbejt naslovi duži/kraći itd.
+
+% ===========================================================================
+\section{Faza 3 --- Obučavanje i evaluacija modela}\label{sec:faza3}
+
+\subsection{Protokol evaluacije}
+% 10-slojna stratifikovana CV; nested CV za baseline hiperparametre;
+% enkoderski: varijante epoha; dekoderski: ceo skup. Metrike: acc, P/R/F1
+% (fokus klikbejt klasa), macro-F1, ROC-AUC.
+
+\subsection{Osnovni modeli (LR + Naivni Bajes)}\label{sec:baseline}
+% efekat preprocessinga (lowercasing, stem/lemma) × TF/IDF/TF-IDF × n-gram
+\inputIfExists{tables/baseline.tex}
+% TODO: analiza — koja preprocessing/feature varijanta najbolje, zašto.
+
+\subsection{Enkoderski LLM (BERTić + mBERT)}\label{sec:encoder}
+% mono vs multi; efekat broja epoha (2/3/4)
+\inputIfExists{tables/encoder.tex}
+% TODO: analiza — mono vs multi, koliko epoha optimalno, poređenje sa baseline.
+
+\subsection{Dekoderski LLM (ChatGPT)}\label{sec:decoder}
+% SR vs EN prompt, zero/few-shot, sa/bez definicije; eval na celom skupu
+\inputIfExists{tables/decoder.tex}
+% TODO: analiza — SR vs EN, zero vs few-shot, diskusija cene/limita API-ja.
+
+\subsection{Uporedni pregled svih modela}\label{sec:poredjenje}
+\inputIfExists{tables/poredjenje.tex}
+\begin{figure}[H]\centering
+\figIfExists{poredjenje_modela.png}{0.7\textwidth}
+\caption{F1 (klikbejt klasa) najboljih varijanti po tipu modela.}
+\end{figure}
+% TODO: glavni nalaz — koji pristup pobeđuje i zašto.
+
+% ===========================================================================
+\section{Zaključak}\label{sec:zakljucak}
+% šta najbolje radi, ograničenja (domen, jedan izvor, veličina skupa), dalji rad.
+
+% ===========================================================================
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,6 @@
+# Faza 3a — baseline (LR + Naivni Bajes). Radi lokalno na CPU (Python 3.9+).
+scikit-learn>=1.3
+numpy
+pandas
+# Opciono — prava lematizacija za normalize=lemma (povlači torch, teže):
+# classla

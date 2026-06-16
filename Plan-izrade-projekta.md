@@ -12,7 +12,7 @@
 |---|---|
 | **Tim** | Filip Nikolić (25/3234), Danilo Nikolić (25/3235) — par (odobreno) |
 | **Zadatak** | Detekcija klikbejt naslova — **binarna klasifikacija** (klikbejt / regularan) |
-| **Domen** | **Sportske vesti** sa domaćih sajtova (Mozzart Sport, Sport Klub, B92) |
+| **Domen** | **Sportske vesti** — izvor **samo SportKlub** (Mozzart i B92 odbačeni; vidi napomenu u Fazi 1) |
 | **Definicija klikbejta** | Očigledne fraze **+** suptilne manipulacije: kognitivni jaz (izostavljanje ključnih info), preuveličavanje važnosti, veštački emocionalni naboj |
 | **Veličina skupa** | **2200 jedinstvenih naslova** = 1100 klikbejt + 1100 regularnih (balansirano) |
 | **Kalibracija** | 10% (~220 naslova) izdvojeno, anotiraju oba člana nezavisno |
@@ -72,10 +72,12 @@ OPJ/
 
 **Cilj:** 2200 jedinstvenih sportskih naslova spremnih za anotaciju.
 
-### 1.1 Izvori
-- **Mozzart Sport**, **Sport Klub**, **B92 (sport sekcija)**.
-- Metode: **RSS feed-ovi** (gde postoje) + **web scraping** (BeautifulSoup/Scrapy/requests).
-- Cilj diverziteta: više sajtova → manji rizik da model uči stil jednog portala umesto stvarnog klikbejta.
+### 1.1 Izvor
+- **SportKlub** (`sportklub.n1info.rs`) — **jedini izvor**. Mozzart i B92 odbačeni.
+- Metod: **WordPress REST API** (~449k članaka; naslov/URL/datum/rubrika bez HTML parsiranja).
+- **Obrazloženje jednog izvora:** obe klase (klikbejt + regularan) dolaze sa istog
+  portala → model uči stvarni klikbejt signal, a ne stil portala. (Izmena u odnosu
+  na prijavu profesoru gde su pomenuta tri izvora — vidi napomenu u `Faza1-plan.md`.)
 
 ### 1.2 Šta skupljati
 - Za svaki naslov beležiti: **tekst naslova**, **URL članka**, **sajt/izvor**, **datum**, **rubrika** (ako dostupna).
@@ -240,7 +242,7 @@ Struktura izveštaja:
 
 | Aktivnost | Filip | Danilo |
 |---|---|---|
-| Scraping | Mozzart Sport | Sport Klub + B92 |
+| Prikupljanje (SportKlub API) | zajednički | zajednički |
 | Anotacija (glavna) | ~pola naslova | ~pola naslova |
 | Kalibracija | nezavisno ceo skup | nezavisno ceo skup |
 | Baseline | LR | NB |
@@ -256,8 +258,8 @@ Struktura izveštaja:
 
 1. ✅ Profesor odobrio — krećemo sa prikupljanjem.
 2. ✅ Postavljena repo struktura + Python okruženje + skraperi (vidi `src/scraping/`).
-3. ▶️ Puni run prikupljanja: SportKlub (API) + Mozzart (ID enumeracija) → `merge.py`.
+3. ✅ Puni run prikupljanja: SportKlub (WP REST API) → 2994 naslova u `data/interim/headlines.csv`.
 4. Paralelno: prvi nacrt `annotation/guidelines.md` (kritično — definiše ceo zadatak).
 5. Mini-pilot: anotirati 30–50 naslova da se uputstvo testira pre prave kalibracije.
 
-> Izvori: B92 izbačen (nepotreban) — radimo sa SportKlub + Mozzart.
+> Izvor: **samo SportKlub** (Mozzart i B92 odbačeni). Vidi `Faza1-plan.md` za obrazloženje.

@@ -1,0 +1,4 @@
+# Faza 3c — dekoderski LLM (ChatGPT). Samo API pozivi (bez GPU-a).
+openai>=1.0
+scikit-learn>=1.3
+numpy

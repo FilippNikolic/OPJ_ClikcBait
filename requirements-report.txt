@@ -1,0 +1,2 @@
+# Faza 4 — generisanje grafikona za izveštaj. numpy/pandas su već u .venv.
+matplotlib
