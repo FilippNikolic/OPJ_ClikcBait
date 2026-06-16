@@ -1,0 +1,42 @@
+=== FAZA 2 — DESKRIPTIVNA STATISTIKA ===
+
+Ukupno labelirano: 2994
+  klikbejt (1): 1476  (49.3%)
+  nije     (0): 1518  (50.7%)
+
+--- Dužina naslova po klasi ---
+
+Dužina naslova — klikbejt:
+  reči:      min 2  max 15  prosek 9.0
+  karakteri: min 11  max 65  prosek 55.2
+
+Dužina naslova — nije:
+  reči:      min 3  max 14  prosek 8.4
+  karakteri: min 16  max 65  prosek 53.3
+
+--- Pod-tipovi među klikbejtom (KJ/PV/EN/SF) ---
+  (pod-tipovi nisu unošeni — opciono)
+
+--- Top rubrike po klasi ---
+  klikbejt:
+      182  SP u fudbalu
+      163  Euroleague
+      153  Roland Garros
+      128  Superliga Srbije
+       85  ABA liga
+       70  Premier League
+       58  NBA
+       40  Primera
+       38  Ostale lige košarka
+       35  Moto GP
+  nije:
+      167  SP u fudbalu
+      164  Superliga Srbije
+      116  Roland Garros
+       88  Euroleague
+       76  Premier League
+       62  NBA
+       52  ABA liga
+       50  Primera
+       47  Ostale lige košarka
+       45  ATP

@@ -1,0 +1,16 @@
+=== FAZA 2 — MEĐUANOTATORSKA SAGLASNOST (IAA) ===
+Kalibracioni skup: 220 unakrsno anotiranih naslova (Filip + Danilo, nezavisno)
+
+MATRICA SLAGANJA (Filip × Danilo)
+                Danilo=1   Danilo=0     Σ Filip
+  Filip=1          78          2          80
+  Filip=0           3        137         140
+  Σ Danilo         81        139         220
+
+Slaganje (Po):      97.7%   (215/220)
+Slučajno (Pe):      0.5360
+Cohen's kappa:      0.951  -> odlično (>0.80)
+Neslaganja:         5
+
+Napomena: neslaganja su usaglašena zajednički po guidelines.md
+(Filipov niži prag na delu uzorka spušten; propušteni KJ/SF klikbejt podignut).

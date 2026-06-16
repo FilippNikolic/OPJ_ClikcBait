@@ -12,12 +12,12 @@
 |---|---|---|---|
 | 0 | Uputstvo `annotation/guidelines.md` | zajedno | ✅ napisano |
 | 1 | Priprema datoteka (`make_splits.py`) | skripta | ✅ urađeno |
-| 2 | **Kalibracija** — 220 naslova, NEZAVISNO | Filip + Danilo | ▶️ ti si ovde |
-| 3 | IAA — Cohen's kappa (`iaa.py`) | skripta | ⏳ |
-| 4 | Revizija uputstva (ako kappa nizak) | zajedno | ⏳ |
-| 5 | **Glavna anotacija** — po pola | Filip + Danilo | ⏳ |
-| 6 | Spajanje + balans 1100/1100 | skripta | ⏳ |
-| 7 | Deskriptivna statistika | skripta | ⏳ |
+| 2 | **Kalibracija** — 220 naslova, NEZAVISNO | Filip + Danilo | ✅ urađeno |
+| 3 | IAA — Cohen's kappa (`iaa.py`) | skripta | ✅ **kappa = 0.951** (97.7% slaganje) → `results/faza2_iaa.txt` |
+| 4 | Revizija uputstva (ako kappa nizak) | zajedno | ✅ nije bila potrebna; 78 neslaganja usaglašeno po `guidelines.md` |
+| 5 | **Glavna anotacija** — po pola | Filip + Danilo | ✅ urađeno (2994 labelirano) |
+| 6 | Spajanje + balans 1100/1100 | skripta | ✅ `dataset.tsv` (1100+1100=2200) |
+| 7 | Deskriptivna statistika | skripta | ✅ `results/faza2_statistika.txt` |
 
 ---
 
