@@ -115,17 +115,19 @@ Izveštaj: `results/faza3b_encoder_izvestaj.md`, sirovo: `results/encoder_{berti
 - *Odnos prema baseline-u?* — Oba transformera **ubedljivo nadmašuju baseline** (AUC +0.11 kod BERTića), glavna teza: bag-of-words ne hvata suptilni klikbejt, kontekstualni enkoderi ga hvataju.
 - *Zašto je prvi run bio sumnjivo kratak?* — Prva verzija je koristila približnu optimizaciju (jedan trening do max epoha + eval po epohi); davala je obrnut trend (2 epohe „najbolje") zbog LR-rasporeda. Zamenjeno zasebnim fine-tuningom po epohi (ispravno, ~2× duže).
 
-### 3c — Dekoderski model (Anthropic Claude API) 🔄 U TOKU
+### 3c — Dekoderski model (Anthropic Claude API) ✅
 - Model: **Claude (`claude-haiku-4-5`)** — bez fine-tuninga (zatvoren model) → samo evaluacija na **celom skupu**.
 - Poređenje **jezika upita: srpski (SR) vs engleski (EN) prompt**, oba sa definicijom klikbejta, zero-shot.
 - **Bitno:** SR/EN se odnosi na **jezik uputstva modelu**, NE na naslove — naslovi su u oba slučaja srpski. Merimo da li jezik prompta utiče na klasifikaciju srpskih naslova.
 - Keš odgovora: `results/decoder_cache/` (prekid/nastavak). Kod: `src/decoder/claude_eval.py`, prompti: `src/decoder/prompts.py`.
 
-**Rezultati:** _(popuniti kad run završi — `results/decoder_results.csv`)_
-| Varijanta | F1(klikbejt) | Acc |
-|---|---|---|
-| SR prompt (sr_zero_def) | … | … |
-| EN prompt (en_zero_def) | … | … |
+**Rezultati** (ceo skup 2200, 0 neparsiranih, ~$1.01) — `results/faza3c_decoder_izvestaj.md`:
+| Varijanta | F1(klikbejt) | Acc | Preciznost | Odziv |
+|---|---|---|---|---|
+| SR prompt (sr_zero_def) | 0.710 | **0.695** | 0.676 | 0.748 |
+| EN prompt (en_zero_def) | **0.715** | 0.691 | 0.664 | 0.775 |
+
+**Nalaz:** SR ≈ EN (gotovo isto) — jezik upita ne menja bitno rezultat; EN viši odziv, SR viša preciznost/accuracy.
 
 **Q&A:**
 - *Zašto Claude, a ne ChatGPT/Gemini?* — Profesor je dozvolio „ChatGPT, Gemini **i drugi**". Besplatni **Gemini tier nije dostupan** za naš nalog/region (greška `limit: 0`). ChatGPT bi se plaćao; iskoristili smo **Claude** (plaćeni, ali jeftin za ovaj zadatak ~$1) kao validan dekoderski model.
@@ -133,10 +135,18 @@ Izveštaj: `results/faza3b_encoder_izvestaj.md`, sirovo: `results/encoder_{berti
 
 ---
 
-## 4. Sinteza Faze 3 ⏳ (sledeći korak)
-Jedna uporedna tabela: najbolji baseline vs BERTić vs mBERT vs Claude (SR/EN) + diskusija (šta radi najbolje i zašto, ograničenja, dalji rad). Ulaz za finalnu dokumentaciju.
+## 4. Sinteza Faze 3 ✅ (`results/faza3_sinteza.md`)
 
-**Očekivani redosled (preliminarno):** transformeri > baseline; dekoder (zero-shot) obično između — biće potvrđeno brojkama.
+| Model | Tip | F1(kb) | Acc | ROC-AUC |
+|---|---|---|---|---|
+| MNB + stem + TF-IDF | baseline | 0.646 | 0.622 | 0.676 |
+| mBERT (3 ep) | enkoder multi | 0.690 | 0.687 | 0.753 |
+| **BERTić (3–4 ep)** | enkoder mono | 0.703 | **0.704** | **0.788** |
+| Claude SR (zero-shot) | dekoder | 0.710 | 0.695 | — |
+| **Claude EN (zero-shot)** | dekoder | **0.715** | 0.691 | — |
+
+**Nalazi:** (1) svi > baseline; (2) **dekoder bez treninga najviši F1** (~0.715), blago iznad BERTića (0.703) — ali BERTić najbolji po accuracy i jedini sa kalibrisanim verovatnoćama (AUC 0.788); (3) mono > multi; (4) 3–4 epohe optimalno; (5) SR≈EN prompt.
+**Preporuka:** produkcija → BERTić (mali, besplatan, lokalan, AUC); bez podataka za trening → Claude zero-shot.
 
 ---
 
@@ -172,5 +182,6 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 7. Trenutni status (na dan pisanja)
-- Faza 1 ✅ · Faza 2 ✅ · Faza 3a ✅ · Faza 3b ✅ · **Faza 3c 🔄 (Claude run u toku)** · Sinteza ⏳ · Faza 4 (dokumentacija) — sledi.
+## 7. Trenutni status
+- Faza 1 ✅ · Faza 2 ✅ · Faza 3a ✅ · Faza 3b ✅ · **Faza 3c ✅** · **Sinteza ✅** → **FAZA 3 ZAVRŠENA.**
+- Sledi **Faza 4 (dokumentacija):** `report/izvestaj.tex` + tabele/grafici iz `report/` (kriva učenja, poređenje modela, raspodela klasa, dužina naslova već generisani).

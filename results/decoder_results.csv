@@ -1,0 +1,3 @@
+model,variant,lang,shots,with_def,n_eval,n_unparsed,new_api_calls,accuracy,precision_kb,recall_kb,f1_kb,f1_macro
+claude-haiku-4-5,en_zero_def,en,zero,True,2200,0,2183,0.691,0.664,0.775,0.715,0.689
+claude-haiku-4-5,sr_zero_def,sr,zero,True,2200,0,2150,0.695,0.676,0.748,0.710,0.694
