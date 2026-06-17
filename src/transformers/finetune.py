@@ -68,7 +68,7 @@ def build_compute_metrics():
 
 
 def run_cv(model_key, epochs_list, n_folds, batch_size, lr, max_len, seed,
-           quick, out_path):
+           quick, out_path, separate=True):
     import numpy as np
     import torch
     from datasets import Dataset
@@ -94,70 +94,87 @@ def run_cv(model_key, epochs_list, n_folds, batch_size, lr, max_len, seed,
     outer = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     compute_metrics = build_compute_metrics()
 
-    # OPTIMIZACIJA: umesto zasebnog treninga za svaku epohu-varijantu, treniramo
-    # JEDNOM do max(epochs) i evaluiramo posle SVAKE epohe (eval_strategy="epoch").
-    # Model je posle N epoha u istom stanju kao da smo zaustavili na N → brojke su
-    # identične, a posla je ~2× manje (10×4 umesto 10×(2+3+4) epoha po modelu).
     target_epochs = sorted(set(int(e) for e in epochs_list))
-    max_epochs = max(target_epochs)
     per_epoch = {e: [] for e in target_epochs}  # epoch -> lista per-fold metrika
 
-    for fold, (tr, te) in enumerate(outer.split(texts, labels)):
-        ds_tr = Dataset.from_dict({"text": list(texts[tr]),
-                                   "label": [int(x) for x in labels[tr]]})
-        ds_te = Dataset.from_dict({"text": list(texts[te]),
-                                   "label": [int(x) for x in labels[te]]})
-        ds_tr = ds_tr.map(tokenize, batched=True)
-        ds_te = ds_te.map(tokenize, batched=True)
-
+    def make_trainer(ds_tr, ds_te, n_epochs, tag):
+        """Svež model + Trainer treniran TAČNO n_epochs (sopstveni LR schedule)."""
         model = AutoModelForSequenceClassification.from_pretrained(
             hf_id, num_labels=2)
         targs = TrainingArguments(
-            output_dir=str(ROOT / "results" / "_hf_tmp" /
-                           f"{model_key}_f{fold}"),
-            num_train_epochs=max_epochs,
+            output_dir=str(ROOT / "results" / "_hf_tmp" / tag),
+            num_train_epochs=n_epochs,
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size * 2,
             learning_rate=lr,
             seed=seed,
-            eval_strategy="epoch",   # evaluiraj posle SVAKE epohe
+            eval_strategy="epoch",
             save_strategy="no",
             logging_steps=50,
             report_to=[],
             fp16=torch.cuda.is_available(),
         )
-        tr_kwargs = dict(
-            model=model, args=targs, train_dataset=ds_tr,
-            eval_dataset=ds_te, compute_metrics=compute_metrics,
-            data_collator=DataCollatorWithPadding(tokenizer),
-        )
-        # 'tokenizer=' je u novijim transformers verzijama preimenovan u
-        # 'processing_class=' (stari naziv → TypeError). Biramo po verziji.
-        _params = inspect.signature(Trainer.__init__).parameters
-        if "processing_class" in _params:
-            tr_kwargs["processing_class"] = tokenizer
-        elif "tokenizer" in _params:
-            tr_kwargs["tokenizer"] = tokenizer
-        trainer = Trainer(**tr_kwargs)
-        t0 = time.time()
-        trainer.train()
+        kw = dict(model=model, args=targs, train_dataset=ds_tr,
+                  eval_dataset=ds_te, compute_metrics=compute_metrics,
+                  data_collator=DataCollatorWithPadding(tokenizer))
+        # 'tokenizer=' preimenovan u 'processing_class=' u novom transformers
+        _p = inspect.signature(Trainer.__init__).parameters
+        if "processing_class" in _p:
+            kw["processing_class"] = tokenizer
+        elif "tokenizer" in _p:
+            kw["tokenizer"] = tokenizer
+        return model, Trainer(**kw)
 
-        # iz log_history izvuci eval metrike po epohi (epoch=1.0, 2.0, ...)
-        evals = {}
-        for rec in trainer.state.log_history:
-            if "eval_f1_kb" in rec:
-                ep = int(round(rec["epoch"]))
-                evals[ep] = {k.replace("eval_", ""): v
-                             for k, v in rec.items() if k.startswith("eval_")}
-        for e in target_epochs:
-            if e in evals:
-                per_epoch[e].append(evals[e])
-        got = ", ".join(f"{e}ep:{evals[e]['f1_kb']:.3f}"
-                        for e in target_epochs if e in evals)
-        print(f"  fold={fold+1}/{n_folds} ({time.time()-t0:.0f}s)  {got}")
+    def cleanup(model, trainer):
         del model, trainer
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+    for fold, (tr, te) in enumerate(outer.split(texts, labels)):
+        ds_tr = Dataset.from_dict({"text": list(texts[tr]),
+                                   "label": [int(x) for x in labels[tr]]}
+                                  ).map(tokenize, batched=True)
+        ds_te = Dataset.from_dict({"text": list(texts[te]),
+                                   "label": [int(x) for x in labels[te]]}
+                                  ).map(tokenize, batched=True)
+
+        if separate:
+            # ZAHTEV: svaka dužina fine-tuninga je ZASEBAN trening (svoj LR
+            # schedule). Skuplje (10×(2+3+4) epoha), ali metodološki ispravno.
+            for e in target_epochs:
+                model, trainer = make_trainer(ds_tr, ds_te, e,
+                                              f"{model_key}_e{e}_f{fold}")
+                t0 = time.time()
+                trainer.train()
+                m = {k.replace("eval_", ""): v
+                     for k, v in trainer.evaluate().items()}
+                per_epoch[e].append(m)
+                print(f"  fold={fold+1}/{n_folds} epochs={e} "
+                      f"F1_kb={m.get('f1_kb', float('nan')):.3f} "
+                      f"({time.time()-t0:.0f}s)")
+                cleanup(model, trainer)
+        else:
+            # BRZA (približna) varijanta: jedan trening do max epoha, eval posle
+            # svake. NB: LR schedule je za max epoha → 2/3 su checkpoint-i, ne
+            # zasebni fine-tuning-zi. Koristiti samo za brzu probu, NE za rad.
+            max_epochs = max(target_epochs)
+            model, trainer = make_trainer(ds_tr, ds_te, max_epochs,
+                                          f"{model_key}_f{fold}")
+            t0 = time.time()
+            trainer.train()
+            evals = {}
+            for rec in trainer.state.log_history:
+                if "eval_f1_kb" in rec:
+                    ep = int(round(rec["epoch"]))
+                    evals[ep] = {k.replace("eval_", ""): v
+                                 for k, v in rec.items() if k.startswith("eval_")}
+            for e in target_epochs:
+                if e in evals:
+                    per_epoch[e].append(evals[e])
+            got = ", ".join(f"{e}ep:{evals[e]['f1_kb']:.3f}"
+                            for e in target_epochs if e in evals)
+            print(f"  fold={fold+1}/{n_folds} ({time.time()-t0:.0f}s)  {got}")
+            cleanup(model, trainer)
 
     keys = ["accuracy", "precision_kb", "recall_kb", "f1_kb", "f1_macro",
             "roc_auc"]
@@ -186,12 +203,16 @@ def main():
     ap.add_argument("--max-len", type=int, default=64,
                     help="naslovi su kratki — 64 tokena je dovoljno")
     ap.add_argument("--quick", action="store_true", help="2 fold-a (smoke)")
+    ap.add_argument("--fast-epochs", action="store_true",
+                    help="približno: jedan trening do max epoha + eval po epohi "
+                         "(NIJE po zahtevu — samo za brzu probu)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     out = args.out or str(common.RESULTS / f"encoder_{args.model}_results.csv")
     run_cv(args.model, args.epochs, args.folds, args.batch_size, args.lr,
-           args.max_len, common.SEED, args.quick, out)
+           args.max_len, common.SEED, args.quick, out,
+           separate=not args.fast_epochs)
 
 
 if __name__ == "__main__":
