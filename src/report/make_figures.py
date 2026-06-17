@@ -84,6 +84,49 @@ def _best_f1(rows):
     return max((num(r) for r in rows), default=0.0)
 
 
+def _num(val):
+    try:
+        return float(str(val).split("±")[0])
+    except (ValueError, AttributeError):
+        return None
+
+
+def fig_kriva_ucenja():
+    """F1 i ROC-AUC u funkciji broja epoha (dužina fine-tuninga) za enkodere."""
+    def load(key):
+        rows = _read_csv(RESULTS / f"encoder_{key}_results.csv")
+        if not rows:
+            return None
+        rows = sorted(rows, key=lambda r: int(r["epochs"]))
+        return ([int(r["epochs"]) for r in rows],
+                [_num(r.get("f1_kb")) for r in rows],
+                [_num(r.get("roc_auc")) for r in rows])
+
+    series = {"BERTić": load("bertic"), "mBERT": load("mbert")}
+    if not any(series.values()):
+        print("ℹ️  Nema encoder_*_results.csv — preskačem krivu_ucenja.png.")
+        return
+    colors = {"BERTić": "#C44E52", "mBERT": "#4C72B0"}
+    fig, ax = plt.subplots(figsize=(5.2, 3.4))
+    all_ep = set()
+    for name, data in series.items():
+        if not data:
+            continue
+        ep, f1, auc = data
+        all_ep.update(ep)
+        ax.plot(ep, f1, "-o", color=colors[name], label=f"{name} F1")
+        if any(a is not None for a in auc):
+            ax.plot(ep, auc, "--s", color=colors[name], alpha=0.55,
+                    label=f"{name} ROC-AUC")
+    ax.set_xlabel("broj epoha (dužina fine-tuninga)")
+    ax.set_ylabel("vrednost metrike")
+    ax.set_title("Kriva učenja: efekat broja epoha")
+    ax.set_xticks(sorted(all_ep))
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+    _save(fig, "kriva_ucenja.png")
+
+
 def fig_poredjenje():
     names, vals = [], []
     b = _read_csv(RESULTS / "baseline_results.csv")
@@ -97,7 +140,7 @@ def fig_poredjenje():
             vals.append(_best_f1(r))
     d = _read_csv(RESULTS / "decoder_results.csv")
     if d:
-        names.append("ChatGPT")
+        names.append("Claude")
         vals.append(_best_f1(d))
 
     if not names:
@@ -116,6 +159,7 @@ def fig_poredjenje():
 
 def main():
     fig_raspodela_i_duzina()
+    fig_kriva_ucenja()
     fig_poredjenje()
     print("\n✅ Grafici u report/figures/. Prekompajliraj izvestaj.tex.")
 
