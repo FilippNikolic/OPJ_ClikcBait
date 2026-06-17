@@ -12,3 +12,7 @@ __pycache__/
 # Privremeni izlazi treninga / keš dekodera
 results/_hf_tmp/
 results/decoder_cache/
+
+# Tajne (API ključevi) — NIKAD u git!
+.env
+secrets/

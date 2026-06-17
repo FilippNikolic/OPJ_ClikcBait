@@ -75,12 +75,13 @@ def run_variant(client, genai_types, model, variant, texts, labels, limit,
     y_true, y_pred = [], []
     n_pt = n_ct = n_calls = skipped = 0
     last_call = 0.0
+    consec_fail = 0
     for i, (naslov, lab) in enumerate(pairs):
         if naslov in cache:
             pred = cache[naslov]["pred"]
         else:
             user = template.format(naslov=naslov)
-            msg = ""
+            msg, ok = "", False
             for attempt in range(5):
                 # throttle: poštuj minimalni razmak između NOVIH poziva (free RPM)
                 wait = min_interval - (time.time() - last_call)
@@ -93,18 +94,28 @@ def run_variant(client, genai_types, model, variant, texts, labels, limit,
                     n_pt += pt
                     n_ct += ct
                     n_calls += 1
+                    ok = True
                     break
                 except Exception as e:  # rate limit / transient
                     last_call = time.time()
                     if attempt == 4:
-                        print(f"\n   ⚠️  preskačem '{naslov[:40]}…': {e}")
-                        break
-                    # 429/limit → duži backoff
-                    time.sleep(min(2 ** attempt * 3, 60))
-            pred = parse_label(msg)
-            common.append_jsonl(
-                {"naslov": naslov, "true": lab, "pred": pred, "raw": msg},
-                cache_path)
+                        print(f"\n   ⚠️  neuspeh '{naslov[:40]}…': {e}")
+                    else:
+                        time.sleep(min(2 ** attempt * 3, 60))  # 429 → backoff
+            pred = parse_label(msg) if ok else None
+            if pred is not None:
+                # keširamo SAMO uspešne → re-run kasnije dopuni neuspele/preskočene
+                common.append_jsonl(
+                    {"naslov": naslov, "true": lab, "pred": pred, "raw": msg},
+                    cache_path)
+                consec_fail = 0
+            else:
+                consec_fail += 1
+                if consec_fail >= 20:
+                    print(f"\n   ⛔ 20 uzastopnih neuspeha (verovatno DNEVNI "
+                          f"limit) — prekidam '{variant['id']}'. Pokreni ponovo "
+                          f"kasnije; keš nastavlja gde je stao.")
+                    break
         if pred is None:
             skipped += 1
             continue
@@ -112,7 +123,7 @@ def run_variant(client, genai_types, model, variant, texts, labels, limit,
         y_pred.append(pred)
         if (i + 1) % 25 == 0:
             sys.stdout.write(f"\r   {variant['id']}: {i+1}/{len(pairs)} "
-                             f"(novih poziva: {n_calls})")
+                             f"(novih: {n_calls}, preskočeno: {skipped})")
             sys.stdout.flush()
     print()
 
