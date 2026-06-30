@@ -1,0 +1,302 @@
+% ============================================================================
+%  Demo-odbrana — tok puštanja projekta pred profesorom (OPJ)
+%  Kompajliranje:  tectonic Demo-odbrana.tex
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{fontspec}
+\setmonofont{lmmono10-regular.otf}[BoldFont=lmmonolt10-bold.otf]
+\usepackage[serbian]{babel}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{fancyvrb}
+\usepackage[most]{tcolorbox}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=blue}
+
+\definecolor{coderule}{RGB}{200,200,200}
+\DefineVerbatimEnvironment{cmd}{Verbatim}%
+  {frame=single, rulecolor=\color{coderule}, fontsize=\small,
+   xleftmargin=6pt, xrightmargin=6pt, framesep=5pt}
+
+% okvir: šta profesor može pitati u ovom koraku
+\newtcolorbox{pita}{
+  colback=orange!7, colframe=orange!55!black, fonttitle=\bfseries\small,
+  title={Šta profesor može pitati ovde}, boxrule=0.4pt, breakable,
+  left=5pt, right=5pt, top=3pt, bottom=3pt, fontupper=\small}
+% okvir: očekivani izlaz
+\newtcolorbox{izlaz}{
+  colback=green!5, colframe=green!45!black, fonttitle=\bfseries\small,
+  title={Očekivani izlaz}, boxrule=0.4pt, breakable,
+  left=5pt, right=5pt, top=3pt, bottom=3pt, fontupper=\small}
+
+\newcommand{\kod}[1]{\texttt{#1}}
+
+\title{\textbf{Demo-odbrana --- tok puštanja projekta}\\[2pt]
+\large Detekcija klikbejt naslova u sportskim vestima na srpskom jeziku}
+\author{Filip Nikolić (25/3234), Danilo Nikolić (25/3235)}
+\date{Obrada prirodnih jezika 2025/2026 --- ETF}
+
+\begin{document}
+\maketitle
+
+\noindent
+Profesor je tražio da ponesemo \textbf{računar sa konfigurisanim projektom} da bismo
+uporedo prolazili kroz rad. Ovaj dokument je \textbf{scenario za to} --- predlog
+hronološkog toka kroz koji bismo vodili demonstraciju: od izvora podataka, preko
+anotacije i saglasnosti (kappa), do modela i izveštaja. Za svaki korak dat je
+\emph{cilj}, \emph{komanda} koju puštamo, \emph{očekivani izlaz} i \emph{moguća
+pitanja} u tom trenutku.
+
+\begin{tcolorbox}[colback=blue!4, colframe=blue!45!black, title={\bfseries Pre dolaska --- ček-lista},fontupper=\small]
+\begin{itemize}[nosep]
+  \item Laptop sa napunjenom baterijom + punjač; projekat otvoren u editoru (VS Code).
+  \item Virtuelno okruženje radi: \kod{source .venv/bin/activate}.
+  \item \kod{.env} sadrži \kod{ANTHROPIC\_API\_KEY} (za demo dekodera) --- ali bez
+    deljenja ključa na ekranu.
+  \item Internet (za SportKlub API i Claude poziv) --- ili pripremljeni keširani
+    rezultati ako mreže nema.
+  \item Otvoreni i PDF-ovi: \kod{izvestaj.pdf}, \kod{Tehnicki-vodic-*.pdf}.
+  \item Podsetnik: enkoderi (BERTić/mBERT) traže GPU --- \emph{ne} pokrećemo uživo,
+    pokazujemo kod i gotove rezultate iz \kod{results/}.
+\end{itemize}
+\end{tcolorbox}
+
+Sve komande se pokreću iz korena projekta: \kod{/Users/filipjackpot/MasterETF/OPJ}.
+
+% ===========================================================================
+\section{Korak 0 --- Pregled strukture projekta}
+\textbf{Cilj:} dati profesoru mapu projekta u 1 minut. Otvoriti
+\kod{docs/Mapa-koda.md} i pokazati četiri faze i gde je šta.
+\begin{cmd}
+ls                       # src/ data/ results/ report/ docs/ ...
+\end{cmd}
+\begin{pita}
+„Objasnite ukratko organizaciju'' --- pokazati: \kod{src/} (kod po fazama),
+\kod{data/} (sirovi$\to$anotirani), \kod{results/} (izlazi modela), \kod{report/}
+(izveštaj). Naglasiti princip: determinizam (seed 42) i razdvojene zavisnosti po fazi.
+\end{pita}
+
+% ===========================================================================
+\section{Korak 1 --- Izvor podataka (Faza 1)}
+\textbf{Cilj:} pokazati odakle i kako prikupljamo naslove. Otvoriti
+\kod{src/scraping/sportklub\_api.py} i objasniti WordPress REST API. Po želji uživo
+povući par naslova (mali broj, da bude brzo):
+\begin{cmd}
+.venv/bin/python src/scraping/sportklub_api.py --broj 20
+\end{cmd}
+\begin{izlaz}
+Ispis „strana 1: ukupno 20'' i snimljen CSV u \kod{data/raw/sportklub\_api\_<datum>.csv}
+sa kolonama \kod{naslov, izvor, url, datum, rubrika, datum\_scrape}.
+\end{izlaz}
+\begin{pita}
+\begin{itemize}[nosep]
+  \item „Zašto jedan izvor, a ne tri kao u prijavi?'' $\to$ da obe klase dolaze sa
+    istog portala pa model uči klikbejt, a ne stil portala.
+  \item „Da li grebete HTML?'' $\to$ ne, koristimo zvanični REST API (pouzdanije).
+  \item „Koje metapodatke beležite?'' $\to$ id, URL, datum, rubrika --- ispunjen
+    zahtev za URL/identifikator.
+  \item „Kako balansirate skup?'' $\to$ overscrape + dedup (egzaktna + rapidfuzz) +
+    balansiranje na 1100/1100 (seed 42).
+\end{itemize}
+\end{pita}
+
+% ===========================================================================
+\section{Korak 2 --- Anotacija i uputstvo (Faza 2)}
+\textbf{Cilj:} pokazati šemu oznaka i pravila. Otvoriti \kod{annotation/guidelines.md}
+--- mehanizmi KJ/PV/EN/SF, šta NIJE klikbejt, rešeni granični primeri. Pokazati i kako
+je posao podeljen:
+\begin{cmd}
+# (već urađeno) priprema datoteka za anotaciju, 50/50, kalibracioni skup:
+.venv/bin/python src/annotation/make_splits.py
+\end{cmd}
+\begin{izlaz}
+\kod{data/annotated/\{filip,danilo\}\_glavna.csv} + \kod{data/calibration/*\_unakrsna.csv};
+prvih 110 redova svake polovine su kalibracioni.
+\end{izlaz}
+\begin{pita}
+\begin{itemize}[nosep]
+  \item „Kako definišete klikbejt?'' $\to$ četiri mehanizma (KJ/PV/EN/SF), dovoljan
+    jedan; ključni test „znaš li šta se desilo''.
+  \item „Ko je anotirao i da li nezavisno?'' $\to$ dva člana, kalibracioni skup
+    nezavisno.
+  \item „Pokažite primer spornog naslova'' $\to$ otvoriti tabelu primera u uputstvu.
+\end{itemize}
+\end{pita}
+
+% ===========================================================================
+\section{Korak 3 --- Međuanotatorska saglasnost / kappa}
+\textbf{Cilj:} pustiti uživo izračunavanje Cohen's kappa --- pokazuje da je anotacija
+stvarno rađena i merena.
+\begin{cmd}
+.venv/bin/python src/annotation/iaa.py
+\end{cmd}
+\begin{izlaz}
+\begin{Verbatim}[fontsize=\small]
+Kalibracionih parova: 220 / 220
+Procentualno slaganje: 82.7%
+Cohen's kappa:         0.640   (dobro)
+Neslaganja: 38
+\end{Verbatim}
+\end{izlaz}
+\begin{pita}
+\begin{itemize}[nosep]
+  \item „Zašto kappa, a ne prost procenat?'' $\to$ kappa skida slaganje slučajem.
+  \item „Vaša kappa je daleko od 0,8 --- zašto?'' (profesorova primedba!) $\to$
+    klikbejt je subjektivan; pomeraj praga je dosledan/jednosmeran; granica je
+    semantička. \emph{Pokazati matricu konfuzije i listu neslaganja u ispisu.}
+  \item „Koje slučajeve ste teško rešavali i kako?'' $\to$ tri obrasca (emotivni
+    epitet / teaser / „bomba''+info) + operativna pravila + adjudikacija.
+\end{itemize}
+\end{pita}
+
+% ===========================================================================
+\section{Korak 4 --- Finalni skup}
+\textbf{Cilj:} pokazati balansiran skup koji ide u Fazu 3.
+\begin{cmd}
+.venv/bin/python src/annotation/build_dataset.py --po-klasi 1100
+.venv/bin/python src/annotation/stats.py
+\end{cmd}
+\begin{izlaz}
+\kod{data/annotated/dataset.tsv} (1100/1100, \kod{naslov\textbackslash t labela}) +
+statistika (raspodela klasa, prosečne dužine ${\approx}9$ reči).
+\end{izlaz}
+\begin{pita}
+„Zašto balansiran?'' $\to$ uklanja pristrasnost ka većinskoj klasi.\quad
+„Razdvaja li dužina klase?'' $\to$ skoro ne (preklapanje), pa dužina nije signal ---
+razlika je u značenju.
+\end{pita}
+
+% ===========================================================================
+\section{Korak 5 --- Pretprocesiranje (tokenizacija/stem/lema)}
+\textbf{Cilj:} uživo demo normalizacije teksta.
+\begin{cmd}
+.venv/bin/python src/preprocessing/serbian.py
+\end{cmd}
+\begin{izlaz}
+Za par primera ispiše \kod{normalize=none} i \kod{normalize=stem} (tokeni razdvojeni
+razmakom) --- vidi se efekat stemovanja.
+\end{izlaz}
+\begin{pita}
+\begin{itemize}[nosep]
+  \item „Kako tokenizujete?'' $\to$ regex (slova+dijakritici+cifre), interpunkcija
+    razdvajač.
+  \item „Razlika stem vs lema?'' $\to$ stem = sečenje nastavaka (heuristika); lema =
+    rečnička reč preko \kod{classla} (POS-svesno).
+  \item „Zašto je to bitno za srpski?'' $\to$ morfološko bogatstvo, smanjenje
+    raštrkanosti.
+\end{itemize}
+\end{pita}
+
+% ===========================================================================
+\section{Korak 6 --- Osnovni modeli (Faza 3a)}
+\textbf{Cilj:} pustiti \emph{brzi} baseline uživo (puni grid traje par minuta, pa za
+demo koristimo \kod{--quick}).
+\begin{cmd}
+python src/baseline/run_baseline.py --quick
+# (ako ima vremena, puni grid:)  python src/baseline/run_baseline.py
+\end{cmd}
+\begin{izlaz}
+Tabela po varijanti sa \kod{F1\_kb} i \kod{AUC}; pun grid daje najbolje
+\emph{NB + stem + TF-IDF (1--2)}, F1${\approx}0{,}646$, i piše
+\kod{results/baseline\_results.csv}.
+\end{izlaz}
+\begin{pita}
+\begin{itemize}[nosep]
+  \item „Šta su C i alpha i kako ih birate?'' $\to$ regularizacija / Laplace
+    izglađivanje; log-grid + ugnežđena CV.
+  \item „Šta je ugnežđena unakrsna validacija?'' $\to$ spoljna meri, unutrašnja bira
+    hiperparametre --- bez curenja.
+  \item „Kako sprečavate curenje pri vektorizaciji?'' $\to$ vektorizator se uči unutar
+    fold-a (Pipeline).
+  \item „Zašto je baseline slabiji?'' $\to$ vreća reči ne hvata kontekst.
+\end{itemize}
+\end{pita}
+
+% ===========================================================================
+\section{Korak 7 --- Enkoderski modeli (Faza 3b)}
+\textbf{Cilj:} objasniti fine-tuning; \emph{ne} pokrećemo uživo (treba GPU), nego
+pokazujemo kod (\kod{src/transformers/finetune.py}) i \emph{gotove} rezultate.
+\begin{cmd}
+# pokazati rezultate (bez obuke uživo):
+column -t -s, results/encoder_bertic_results.csv | head
+\end{cmd}
+\begin{izlaz}
+Metrike po epohi/fold-u; najbolje BERTić, 3--4 epohe: F1${\approx}0{,}703$,
+ROC-AUC${\approx}0{,}788$.
+\end{izlaz}
+\begin{pita}
+\begin{itemize}[nosep]
+  \item „Šta je BERT i razlika enkoder/dekoder?'' $\to$ enkoder razume (maskiranje),
+    dekoder generiše.
+  \item „Zašto BERTić > mBERT?'' $\to$ mono troši kapacitet na srpski, multi ga deli.
+  \item „Kako birate epohe?'' $\to$ varirali 2/3/4; 3--4 optimum (kriva učenja).
+  \item „Zašto ne uživo?'' $\to$ traži GPU; obučavano na Colab-u, ovde pokazujemo kod i
+    rezultate.
+\end{itemize}
+\end{pita}
+
+% ===========================================================================
+\section{Korak 8 --- Dekoderski model (Faza 3c)}
+\textbf{Cilj:} pustiti \emph{mali} zero-shot demo na nekoliko naslova (jeftino, brzo).
+\begin{cmd}
+python src/decoder/claude_eval.py --model claude-haiku-4-5 --limit 20
+\end{cmd}
+\begin{izlaz}
+Klasifikacija 20 naslova (0/1), metrike na tom uzorku; rezultati keširani u
+\kod{results/decoder\_cache/}. Pun skup daje F1${\approx}0{,}715$.
+\end{izlaz}
+\begin{pita}
+\begin{itemize}[nosep]
+  \item „Šta je zero-shot i zašto bez fine-tuninga?'' $\to$ zatvoren model; meri se
+    sposobnost bez obuke na našim podacima.
+  \item „Kako gradite prompt?'' $\to$ system traži samo cifru; varijante SR/EN,
+    zero/few, sa/bez definicije.
+  \item „Zašto keširanje i bez temperature?'' $\to$ ponovljivost, ušteda, determinizam.
+  \item „Zašto nema ROC-AUC?'' $\to$ vraća tvrdu 0/1 odluku, ne verovatnoću.
+\end{itemize}
+\end{pita}
+
+% ===========================================================================
+\section{Korak 9 --- Izveštaj (Faza 4)}
+\textbf{Cilj:} pokazati da se ceo izveštaj generiše iz rezultata i kompajlira.
+\begin{cmd}
+.venv/bin/python src/report/make_tables.py     # results/*.csv -> report/tables/*.tex
+.venv/bin/python src/report/make_figures.py     # -> report/figures/*.png
+cd report && tectonic izvestaj.tex && open izvestaj.pdf
+\end{cmd}
+\begin{izlaz}
+Regenerisane tabele i grafici; \kod{report/izvestaj.pdf} (${\approx}10$ strana) se
+otvara sa svim rezultatima.
+\end{izlaz}
+\begin{pita}
+\begin{itemize}[nosep]
+  \item „Koji je konačni zaključak?'' $\to$ nema jedinstvenog pobednika: Claude najbolji
+    F1, BERTić najbolja tačnost/AUC; za produkciju BERTić.
+  \item „Koje metrike i zašto F1 na klikbejt klasi?'' $\to$ to je ciljna klasa; tačnost
+    može biti varljiva.
+  \item „Ograničenja i dalji rad?'' $\to$ mali skup/jedan domen; few-shot, kalibracija,
+    ansambl, analiza tipova grešaka.
+\end{itemize}
+\end{pita}
+
+% ===========================================================================
+\section{Rezervni plan (ako nešto ne radi)}
+\begin{itemize}[nosep]
+  \item \textbf{Nema interneta:} preskočiti uživo scraping i Claude poziv --- pokazati
+    već prikupljene \kod{data/raw/} i keširane \kod{results/decoder\_cache/}.
+  \item \textbf{Baseline traje predugo:} koristiti \kod{--quick} (3 fold-a, jedna
+    konfiguracija).
+  \item \textbf{Enkoderi:} nikad uživo --- uvek gotovi CSV-ovi u \kod{results/}.
+  \item \textbf{Sve staje:} sve brojke su u \kod{izvestaj.pdf} i u
+    \kod{results/*\_izvestaj.md}; demonstraciju voditi kroz njih.
+\end{itemize}
+
+\vspace{2mm}\hrule\vspace{2mm}
+\noindent\textit{Vidi i:} \texttt{Pitanja-profesora.pdf} (27 pitanja sa odgovorima),
+\texttt{docs/Komande.md} (sve komande), \texttt{Tehnicki-vodic-detaljan.pdf}
+(teorija uz kod).
+
+\end{document}

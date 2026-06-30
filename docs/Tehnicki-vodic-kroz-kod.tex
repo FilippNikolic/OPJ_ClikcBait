@@ -1,0 +1,573 @@
+% ============================================================================
+%  Tehnički vodič kroz kod — Detekcija klikbejt naslova (OPJ 2025/2026)
+%  Kompajliranje:  tectonic Tehnicki-vodic-kroz-kod.tex
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{fontspec}            % XeTeX/tectonic: nativni Unicode (radi i u Verbatim)
+\setmonofont{lmmono10-regular.otf}[BoldFont=lmmonolt10-bold.otf]  % monospace, Unicode
+\usepackage[serbian]{babel}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath}             % \tfrac, \cdot...
+\usepackage{xcolor}
+\usepackage{fancyvrb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage[most]{tcolorbox}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black}
+
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{coderule}{RGB}{200,200,200}
+
+% „Teorija" okvir — objašnjenje pojma uz kod
+\newtcolorbox{teorija}[1][]{
+  colback=blue!4, colframe=blue!45!black, fonttitle=\bfseries\small,
+  title={\faTheory Teorija#1}, boxrule=0.4pt, breakable,
+  left=5pt, right=5pt, top=3pt, bottom=3pt, fontupper=\small}
+\newcommand{\faTheory}{}  % bez ikone (bez dodatnih font-paketa)
+
+% okvir za kod (verbatim, podržava UTF-8 dijakritike)
+\DefineVerbatimEnvironment{code}{Verbatim}%
+  {frame=single, rulecolor=\color{coderule}, fontsize=\small,
+   xleftmargin=6pt, xrightmargin=6pt, framesep=5pt, baselinestretch=0.95}
+
+\newcommand{\fajl}[1]{\textbf{\texttt{#1}}}
+\newcommand{\kod}[1]{\texttt{#1}}
+
+\title{\textbf{Tehnički vodič kroz kod}\\[2pt]
+\large Detekcija klikbejt naslova u sportskim vestima na srpskom jeziku}
+\author{Obrada prirodnih jezika 2025/2026 --- Elektrotehnički fakultet}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent
+Ovaj dokument prolazi kroz \emph{ceo izvorni kod} projekta, fajl po fajl, i za svaki
+objašnjava \textbf{šta radi}, \textbf{kako je tehnički realizovan} i \textbf{šta
+proizvodi}, uz primere gde pomažu razumevanju. Namenjen je za pripremu odbrane --- da
+se kroz projekat može proći uporedo sa kodom. Pregled „gde se šta nalazi'' (kraća
+verzija) je u \texttt{docs/Mapa-koda.md}, a komande za pokretanje u
+\texttt{docs/Komande.md}.
+
+\tableofcontents
+\vspace{4mm}\hrule
+
+% ===========================================================================
+\section{Arhitektura i tok podataka}
+Projekat je organizovan oko \textbf{četiri faze}, gde izlaz jedne faze ulazi u
+sledeću. Sav kod je u Python-u, podeljen u pakete pod \kod{src/} po fazama.
+
+\begin{code}
+Faza 1  scraping        ==>  data/raw/*.csv            (sirovi naslovi)
+Faza 2  anotacija       ==>  data/annotated/dataset.tsv (1100/1100) + IAA (kappa)
+Faza 3  modeli          ==>  results/*.csv             (baseline / enkoder / dekoder)
+Faza 4  izveštaj        ==>  report/tables/*.tex + figures/*.png ==> izvestaj.pdf
+\end{code}
+
+\noindent
+Ključna ideja koja se ponavlja kroz kod: \emph{determinizam i reproduktivnost}
+(fiksiran \kod{seed=42} svuda gde se uzorkuje/meša) i \emph{razdvojene zavisnosti po
+fazi} (\kod{requirements/requirements-*.txt}), da bi se svaka faza mogla pokrenuti
+nezavisno.
+
+% ===========================================================================
+\section{Faza 1 --- Prikupljanje podataka (\texttt{src/scraping/})}
+
+\subsection{\texttt{sportklub\_api.py} --- glavni skraper}
+Prikuplja naslove sa portala SportKlub preko njegovog \textbf{WordPress REST API-ja}.
+Umesto „grebanja'' HTML stranica, koristi se zvanični JSON endpoint
+\kod{/wp-json/wp/v2/posts}, koji vraća čist naslov, datum i kategorije --- mnogo
+pouzdanije od parsiranja HTML-a.
+
+\textbf{Kako radi (paginacija):} u petlji se traži stranica po stranica (po 100
+naslova), dok se ne sakupi traženi broj. Između zahteva stoji pauza (\kod{time.sleep})
+da se API ne preoptereti:
+
+\begin{code}
+API = "https://sportklub.n1info.rs/wp-json/wp/v2"
+while len(rows) < broj:
+    params = {"per_page": 100, "page": page,
+              "_fields": "title,link,date,categories"}
+    r = requests.get(f"{API}/posts", headers=HEADERS, params=params, timeout=20)
+    ...
+    page += 1
+    time.sleep(pause)        # ljubazno prema serveru
+\end{code}
+
+\textbf{Čišćenje naslova.} WordPress vraća naslove sa HTML entitetima (npr.
+\kod{\&\#8220;} umesto navodnika). Funkcija \kod{\_clean\_html} ih dekodira i uklanja
+zaostale tagove:
+
+\begin{code}
+def _clean_html(s):
+    s = html.unescape(s)          # &#8220; -> „
+    s = re.sub(r"<[^>]+>", "", s)  # ukloni <...> tagove
+    return s.strip()
+\end{code}
+
+\textbf{Metapodaci.} Svaki naslov se pakuje u \kod{Headline} strukturu sa poljima:
+naslov, izvor, URL, datum objave, rubrika (ime kategorije, dobijeno iz
+\kod{fetch\_categories}) i datum prikupljanja --- čime je ispunjen zahtev da se
+zabeleži jedinstveni izvor/URL.
+
+\textbf{Izlaz:} \kod{data/raw/sportklub\_api\_<datum>.csv}. Namerno se povlači
+\emph{višak} (3000--4000) da bi se posle anotacije skup mogao izbalansirati.
+
+\subsection{\texttt{common.py}, \texttt{merge.py} i ostali}
+\begin{itemize}[nosep]
+  \item \fajl{common.py} --- zajednički alati skrapera: \kod{Headline} struktura,
+    HTTP \kod{HEADERS}, \kod{save\_csv}, konstanta putanje \kod{DATA\_RAW}.
+  \item \fajl{merge.py} --- spaja više povlačenja i radi \textbf{deduplikaciju}:
+    egzaktnu (identičan tekst) i \emph{približnu} (near-duplicate, biblioteka
+    \kod{rapidfuzz}) da bi uklonio gotovo iste naslove.
+  \item \fajl{rss\_scraper.py} --- rezervni izvor preko RSS-a.
+  \item \fajl{mozzart\_bulk.py} --- skraper za Mozzart; \emph{napušten} (rad samo sa
+    SportKlub-om).
+\end{itemize}
+
+% ===========================================================================
+\section{Faza 2 --- Anotacija (\texttt{src/annotation/})}
+Cilj faze: od sirovih naslova napraviti \textbf{balansiran, označen} skup i izmeriti
+koliko se dva anotatora slažu (\textbf{Cohen's kappa}).
+
+\subsection{\texttt{make\_splits.py} --- podela posla}
+Deli skup \emph{tačno na pola} (Filip / Danilo, deterministički \kod{seed=42}). Da bi
+se mogla izračunati saglasnost, izdvaja \textbf{kalibracioni skup}: prvih 110 naslova
+svake polovine anotiraju \emph{oba} člana (unakrsno), pa za 220 naslova postoje dve
+nezavisne oznake.
+
+\begin{code}
+rnd.shuffle(rows)                  # deterministički (seed 42)
+A, B = rows[:pola], rows[pola:]    # Filipova / Danilova polovina
+cal_A, cal_B = A[:110], B[:110]    # kalibracioni (prvih 110 svake) -> anotira i drugi
+\end{code}
+
+\textbf{Izlaz:} \kod{data/annotated/\{filip,danilo\}\_glavna.csv} (sa praznom kolonom
+\kod{labela}) i \kod{data/calibration/*\_unakrsna.csv} (kalibracioni za drugog člana).
+
+\subsection{\texttt{iaa.py} --- Cohen's kappa}
+Računa međuanotatorsku saglasnost. \textbf{Cohen's kappa} meri slaganje \emph{iznad}
+slučajnog: ako se dva anotatora slažu samo zato što obojica često biraju istu klasu,
+kappa to „kažnjava''. Formula:
+\[
+\kappa = \frac{P_o - P_e}{1 - P_e},
+\]
+gde je $P_o$ stvarni udeo slaganja, a $P_e$ \emph{očekivano} slaganje slučajem.
+Implementacija je svega nekoliko linija:
+
+\begin{code}
+def cohen_kappa(a, b):
+    n = len(a)
+    po = sum(1 for x, y in zip(a, b) if x == y) / n          # stvarno slaganje
+    pe = sum((a.count(c)/n) * (b.count(c)/n)                  # očekivano slučajem
+             for c in set(a) | set(b))
+    return (po - pe) / (1 - pe), po
+\end{code}
+
+\textbf{Primer (naši brojevi).} Od 220 kalibracionih, slažu se na 182 $\Rightarrow$
+$P_o = 0{,}827$. Filip je 93 naslova označio kao klikbejt (127 kao regularan), Danilo
+81 (139 regularan). Očekivano slaganje:
+\[
+P_e = \tfrac{127}{220}\!\cdot\!\tfrac{139}{220} + \tfrac{93}{220}\!\cdot\!\tfrac{81}{220}
+= 0{,}520.
+\]
+\[
+\kappa = \frac{0{,}827 - 0{,}520}{1 - 0{,}520} = \mathbf{0{,}640}.
+\]
+Skripta ispiše i interpretaciju po Landis--Kohovoj skali (0,61--0,80 = „dobro'') i
+listu svih neslaganja --- ulaz za analizu spornih slučajeva u izveštaju.
+
+\begin{teorija}[ --- zašto kappa, a ne prosto slaganje]
+Prosto procentualno slaganje ($P_o$) precenjuje kvalitet kada je zadatak
+\emph{neuravnotežen} ili anotatori imaju naviku da biraju istu klasu. Ako bi npr.\ oba
+anotatora nasumično pogađala, ali 80\,\% naslova nazivala regularnim, slučajno bi se
+složili u $\approx 0{,}68$ slučajeva --- a to nije nikakvo „znanje''. \textbf{Cohen's
+kappa} oduzima to očekivano slaganje slučajem ($P_e$) i normira ostatak:
+$\kappa=1$ je savršeno slaganje, $\kappa=0$ je „kao slučaj'', $\kappa<0$ gore od
+slučaja. Zato je kappa standard za međuanotatorsku saglasnost: meri slaganje
+\emph{koje se ne može objasniti pukom raspodelom klasa}. Za binarne oznake u
+ozbiljnim primenama poželjno je $\kappa\ge 0{,}8$; naših $0{,}640$ je „dobro'' i
+posledica suštinske subjektivnosti pojma klikbejt (detaljno u izveštaju).
+\end{teorija}
+
+\subsection{\texttt{build\_dataset.py} --- balansiranje}
+Spaja dve označene polovine i pravi \textbf{balansiran} finalni skup: deterministički
+izmeša i uzme do 1100 naslova svake klase (1100 klikbejt / 1100 regularan):
+
+\begin{code}
+rnd = random.Random(42)
+rnd.shuffle(sel_kb); rnd.shuffle(sel_ne)   # po klasi
+bal = sel_kb[:1100] + sel_ne[:1100]
+rnd.shuffle(bal)                            # promešaj klase
+\end{code}
+
+\textbf{Izlaz:} \kod{data/annotated/dataset.tsv} (format \kod{naslov\textbackslash t
+labela} --- ulaz za Fazu 3) i nebalansirani \kod{dataset\_full.csv} (zadržava
+\kod{id}/\kod{podtip}). Balansiranje uklanja pristrasnost klasifikatora ka većinskoj
+klasi i pojednostavljuje tumačenje metrika.
+
+\subsection{\texttt{reconcile\_iaa.py}, \texttt{stats.py}}
+\begin{itemize}[nosep]
+  \item \fajl{reconcile\_iaa.py} --- pomaže pri \emph{adjudikaciji} (usaglašavanju)
+    spornih naslova posle IAA.
+  \item \fajl{stats.py} --- deskriptivna statistika finalnog skupa (raspodela klasa,
+    prosečne dužine) $\to$ \kod{results/faza2\_statistika.txt}.
+\end{itemize}
+
+% ===========================================================================
+\section{Pretprocesiranje teksta (\texttt{src/preprocessing/serbian.py})}
+Centralni modul za \textbf{tokenizaciju, stemovanje i lematizaciju}; koristi ga Faza
+3a. Detaljno objašnjenje tehnika sa primerima je u zasebnom dokumentu
+\texttt{docs/Obrada-teksta.md}; ovde sažeto i tehnički.
+
+\textbf{Lanac:} \kod{basic\_normalize} (NFC + ćirilica$\to$latinica + lowercase)
+$\to$ \kod{tokenize} $\to$ opciono \kod{stem}/\kod{lemma}.
+
+\textbf{Tokenizacija} regularnim izrazom --- token je niz slova (sa srpskim
+dijakriticima) i cifara; interpunkcija je razdvajač:
+\begin{code}
+# token = cifre + latinica + srpski dijakritici (zćčđš) + ćirilica (opseg A-S)
+_TOKEN_RE = re.compile(r"[0-9a-zžćčđš<ćirilica>]+")
+"Partizan pobedio 2:1!" -> ["partizan", "pobedio", "2", "1"]
+\end{code}
+
+\textbf{Stemovanje} --- heuristički, bez zavisnosti: za token se pohlepno (najduži
+prvo) uklanja najduži poznati srpski nastavak, uz zaštitu da osnova ne padne ispod 3
+slova:
+\begin{code}
+for suf in _SUFFIXES:                       # sortirani od najdužeg
+    if token.endswith(suf) and len(token)-len(suf) >= 3:
+        return token[:-len(suf)]
+"pobedom","pobede","pobedi" -> "pobed"      # ista osnova
+\end{code}
+
+\textbf{Lematizacija} --- prava, preko biblioteke \kod{classla} (model za srpski,
+procesori \kod{tokenize,pos,lemma}). Za razliku od stemera, vraća rečničku lemu i
+hvata nepravilne oblike (\kod{najbolji}$\to$\kod{dobar}). Lazy-inicijalizacija i
+keširanje modela, batch obrada radi brzine.
+
+\textbf{Bez curenja informacija:} pošto su stem/lemma deterministički po tokenu,
+pretprocesiranje se radi \emph{jednom} nad celim skupom; vokabular i IDF se uče tek
+unutar svakog fold-a (vidi sledeću sekciju).
+
+\begin{teorija}[ --- zašto uopšte normalizovati reči]
+Klasični modeli vide tekst kao \textbf{vreću reči} (engl.\ \emph{bag of words}): svaka
+različita reč je zasebno obeležje (kolona). Srpski je \emph{morfološki bogat} --- ista
+reč ima desetine oblika (\kod{pobeda, pobede, pobedom, pobedi}\dots). Bez normalizacije
+model svaki oblik uči zasebno, pa se signal \emph{raspršuje} po mnogo retkih kolona i
+modelu brzo ponestane primera po obeležju (problem \emph{retkosti}/sparsnosti).
+Stemovanje i lematizacija spajaju te oblike u jednu osnovu $\Rightarrow$ manje
+dimenzija, gušće kolone, bolja generalizacija. \textbf{Stem vs lema:} stem je brza
+heuristika (može pogrešiti), lema je morfološki tačna ali traži model --- zato obe
+poredimo kao varijante. Lowercasing i transliteracija ćirilice su ista ideja:
+spajanje površinski različitih, a značenjski istih tokena.
+\end{teorija}
+
+% ===========================================================================
+\section{Faza 3a --- Osnovni modeli (\texttt{src/baseline/})}
+
+\subsection{\texttt{run\_baseline.py} --- grid eksperimenata}
+Poredi \textbf{logističku regresiju} i \textbf{multinomijalni naivni Bajes} preko
+\kod{scikit-learn}, nad svim kombinacijama: normalizacija
+(\kod{none}/\kod{stem}/\kod{lemma}) $\times$ ponderisanje
+(\kod{bow}/\kod{tf}/\kod{idf}/\kod{tfidf}) $\times$ n-gram (1--1 / 1--2).
+
+\textbf{Šeme ponderisanja} se mapiraju na parametre sklearn vektorizatora:
+\begin{code}
+bow   : CountVectorizer()                              # puko brojanje
+tf    : TfidfVectorizer(use_idf=False, norm="l2")      # term-frekvencija
+idf   : TfidfVectorizer(binary=True, use_idf=True)     # prisustvo × IDF
+tfidf : TfidfVectorizer(use_idf=True, sublinear_tf=True, norm="l2")  # pun TF-IDF
+# zajedničko: token_pattern=r"\S+"  (tekst je već tokenizovan), min_df=2
+\end{code}
+\begin{teorija}[ --- TF, IDF i TF-IDF ponderisanje]
+Pošto reči nisu jednako informativne, broj pojavljivanja se \emph{pondériše}:
+\begin{itemize}[nosep]
+  \item \textbf{TF} (\emph{term frequency}) --- koliko se reč javlja u naslovu. Česta
+    reč u dokumentu je važnija za taj dokument. (\kod{norm="l2"} skalira vektor na
+    jediničnu dužinu da duži naslovi ne dominiraju.)
+  \item \textbf{IDF} (\emph{inverse document frequency}) --- $\log(N/df)$: reč koja se
+    javlja u \emph{svakom} naslovu (npr.\ „je'', „u'') nosi malo informacije i dobija
+    malu težinu; retka, specifična reč dobija veliku.
+  \item \textbf{TF-IDF} = TF $\times$ IDF --- spaja oba: visoko vrednuje reč koja je
+    \emph{česta u ovom} naslovu, a \emph{retka u korpusu} (tj.\ diskriminativna).
+    \kod{sublinear\_tf} primeni $1+\log(\mathrm{TF})$ jer 10 pojava nije 10$\times$
+    važnije od jedne.
+\end{itemize}
+Zašto baš ove varijante poredimo: na \emph{kratkim} naslovima reči se retko ponavljaju,
+pa TF$\approx$prisustvo i IDF nosi glavninu razlike --- empirijski proveravamo koliko
+to vredi. \kod{min\_df=2} izbacuje reči iz samo jednog naslova (verovatno šum/tipfeler,
+i sprečavaju preprilagođavanje). \textbf{N-grami} (1--2) uz pojedinačne reči hvataju i
+kratke fraze („velika vest'') koje kao signal vrede više od zbira reči.
+\end{teorija}
+Bitno: \kod{lowercase=False} i \kod{token\_pattern=\textbackslash S+} jer je tekst
+\emph{već} tokenizovan u \kod{serbian.py} --- vektorizator samo deli po razmaku, ne
+tokenizuje ponovo.
+
+\textbf{Pošteno ocenjivanje --- ugnežđena unakrsna validacija.} Da se izbegne curenje
+informacija, koristi se \emph{nested CV}: spoljna 10-struka petlja meri performansu, a
+unutrašnja bira hiperparametre (\kod{GridSearchCV}). Vektorizator je deo
+\kod{Pipeline}-a, pa se vokabular/IDF uče \emph{samo} na trening delu svakog fold-a:
+
+\begin{code}
+outer = StratifiedKFold(10, shuffle=True, random_state=42)
+for tr, te in outer.split(X, y):
+    pipe = Pipeline([("vec", make_vectorizer(...)), ("clf", est)])
+    gs = GridSearchCV(pipe, grid, scoring="f1", cv=inner)   # bira C / alpha
+    gs.fit(X[tr], y[tr])                # uči SAMO na trening foldu
+    y_pred = gs.best_estimator_.predict(X[te])
+\end{code}
+
+\begin{teorija}[ --- zašto baš \emph{ugnežđena} i \emph{stratifikovana} CV]
+\textbf{Unakrsna validacija (CV)} deli skup na $k$ delova (fold-ova): trenira na
+$k\!-\!1$, testira na 1, i tako $k$ puta --- pa usrednji. Time se performansa meri na
+\emph{svim} podacima, a ne na jednom srećnom/nesrećnom razdvajanju.
+\textbf{Stratifikovana} znači da svaki fold čuva odnos klasa (50/50) --- inače bi neki
+fold mogao slučajno dobiti previše jedne klase i iskriviti metriku.
+\textbf{Zašto \emph{ugnežđena} (nested):} ako biramo hiperparametre i \emph{istovremeno}
+prijavljujemo rezultat na istom test skupu, „provirili'' smo u test $\Rightarrow$
+optimistično pristrasna ocena. Zato unutrašnja petlja bira \kod{C}/\kod{alpha} samo na
+trening delu, a spoljna petlja (koja test fold nikad nije videla pri izboru) daje
+\emph{poštenu} ocenu. \kod{random\_state=42} čini podele ponovljivim.
+\end{teorija}
+
+\textbf{Hiperparametri --- čemu služe i zašto ti opsezi.} Hiperparametri se ne uče iz
+podataka nego se zadaju i biraju validacijom. Mi tražimo po log-skali (geometrijski
+korak), jer njihov efekat je multiplikativan, a ne linearan:
+\begin{code}
+LR  (logistička regresija):  C     in {0.01, 0.1, 1, 10, 100}
+MNB (naivni Bajes):          alpha in {0.01, 0.1, 0.5, 1, 2}
+\end{code}
+
+\begin{teorija}[ --- C (regularizacija) i alpha (izglađivanje)]
+\textbf{\kod{C} kod logističke regresije} kontroliše \emph{regularizaciju} --- kaznu za
+prevelike težine. Model minimizuje (greška) $+\frac{1}{C}\lVert w\rVert$. \emph{Malo
+C} $\Rightarrow$ jaka kazna $\Rightarrow$ jednostavniji model, manje
+preprilagođavanja (\emph{overfitting}), ali rizik od \emph{podprilagođavanja}. \emph{Veliko
+C} $\Rightarrow$ slaba kazna $\Rightarrow$ model se pripije uz trening podatke (rizik
+overfittinga). Pošto se prava vrednost ne zna unapred, probamo opseg
+$0{,}01\!-\!100$ i pustimo validaciju da izabere. Kod kratkih, retkih tekstova
+regularizacija je važna jer obeležja ima mnogo, a primera malo.
+
+\medskip
+\textbf{\kod{alpha} kod naivnog Bajesa} je \emph{Laplace/aditivno izglađivanje}.
+Naivni Bajes množi verovatnoće reči; ako se neka reč u trening skupu nikad nije pojavila
+uz klasu, njena verovatnoća je 0 i \emph{poništi} ceo proizvod. \kod{alpha} dodaje malu
+„pseudo-frekvenciju'' svakoj reči da nijedna ne bude nula. \emph{Veće alpha} =
+glađe/opreznije procene (više se oslanja na prior), \emph{manje alpha} = vernije
+trening podacima. Opet biramo validacijom u $0{,}01\!-\!2$.
+
+\medskip
+\textbf{Zašto log-skala:} skok sa $C{=}1$ na $2$ je beznačajan, ali sa $1$ na $100$
+menja ponašanje modela --- zato koraci idu $\times10$, a ne $+1$ (efikasnije pokriva
+prostor sa malo tačaka).
+\end{teorija}
+
+\begin{teorija}[ --- dva modela: zašto upravo NB i LR]
+\textbf{Multinomijalni naivni Bajes} je verovatnosni klasifikator: pretpostavlja da su
+reči \emph{nezavisne} u datoj klasi (otud „naivni'') i računa koja klasa čini naslov
+verovatnijim. Brz, jak na malom tekstu, klasičan baseline za klasifikaciju teksta.
+\textbf{Logistička regresija} je linearni model koji uči težinu svake reči i kombinuje
+ih u verovatnoću klikbejta; ne pretpostavlja nezavisnost i daje dobro kalibrisane
+verovatnoće. Dva komplementarna pristupa daju pošteniju „donju granicu'' koju
+transformeri treba da nadmaše.
+\end{teorija}
+
+\subsection{\texttt{common.py} --- učitavanje i metrike}
+\kod{load\_dataset} čita \kod{dataset.tsv}; \kod{compute\_metrics} računa iste metrike
+za sve modele (radi poređenja): tačnost, preciznost/odziv/\textbf{F1 za klikbejt
+klasu}, makro-F1 i \textbf{ROC-AUC} (kada model daje verovatnoće).
+
+\begin{teorija}[ --- preciznost, odziv, F1, ROC-AUC]
+\textbf{Preciznost} = od svih koje je model proglasio klikbejtom, koliko ih je stvarno
+klikbejt (koliko „lažnih uzbuna''). \textbf{Odziv} (\emph{recall}) = od svih stvarnih
+klikbejtova, koliko ih je model uhvatio (koliko je „propustio''). Njih dvoje su u
+tenziji --- agresivniji model ima veći odziv ali manju preciznost. \textbf{F1} je
+njihova harmonijska sredina, jedan broj koji nagrađuje balans (kažnjava ako je bilo
+koje od dvoje nisko). \textbf{Zašto F1 baš na klikbejt klasi:} klikbejt (oznaka 1) je
+klasa koja nas zanima da detektujemo; sama tačnost može biti varljiva, a F1 na ciljnoj
+klasi direktno meri kvalitet detekcije. \textbf{Makro-F1} usrednji F1 obe klase
+(tretira ih ravnopravno). \textbf{ROC-AUC} meri koliko dobro model \emph{rangira}
+naslove po verovatnoći (nezavisno od praga 0,5): 1,0 savršeno, 0,5 nasumično ---
+zato ga imaju samo modeli koji daju verovatnoću (NB, LR, BERT), a ne dekoder koji
+vraća tvrdu 0/1 odluku.
+\end{teorija}
+
+\textbf{Izlaz:} \kod{results/baseline\_results.csv}. Najbolje: \emph{naivni Bajes +
+stem + TF-IDF (1--2)}, F1$\approx$0,646.
+
+% ===========================================================================
+\section{Faza 3b --- Enkoderski LLM (\texttt{src/transformers/})}
+
+\subsection{\texttt{finetune.py} --- fine-tuning BERTić i mBERT}
+Fino podešava dva enkoderska transformera preko HuggingFace \kod{Trainer}-a:
+\textbf{BERTić} (\kod{classla/bcms-bertic}, monolingvalni za BCMS) i \textbf{mBERT}
+(\kod{bert-base-multilingual-cased}, višejezični). Protokol: 10-struka CV, variranje
+broja epoha (2/3/4). Traži GPU --- pokreće se na Colab-u.
+
+\begin{teorija}[ --- šta je BERT, enkoder vs dekoder, fine-tuning]
+\textbf{Transformer} je neuronska mreža koja čita ceo tekst odjednom i preko mehanizma
+\emph{pažnje} (\emph{attention}) za svaku reč gleda \emph{kontekst} (ostale reči). Otud
+„kontekstualni'' modeli: ista reč dobija različitu reprezentaciju zavisno od okoline ---
+za razliku od vreće reči koja je slepa za kontekst. \textbf{Enkoder} (BERT) je naučen da
+\emph{razume} tekst (predviđa zamaskirane reči gledajući levo \emph{i} desno) i idealan
+je za klasifikaciju. \textbf{Dekoder} (GPT, Claude) je naučen da \emph{generiše} tekst
+(predviđa sledeću reč) --- koristimo ga u Fazi 3c.
+\textbf{Fine-tuning} = uzmemo model već \emph{predtreniran} na ogromnom korpusu i
+nastavimo obuku kratko na našem malom označenom skupu, da se prilagodi baš zadatku
+klikbejta. \textbf{Mono vs multi:} BERTić je treniran samo na srpskom/srodnim jezicima,
+pa bolje hvata nijanse od višejezičnog mBERT-a koji deli kapacitet na 100+ jezika ---
+zato BERTić pobeđuje.
+\end{teorija}
+
+\textbf{Tehnički zanimljiv detalj --- sudar imena.} Folder se zove \kod{transformers},
+isto kao HuggingFace biblioteka. Da \kod{import transformers} ne učita \emph{lokalni}
+folder umesto biblioteke, kod na startu čisti \kod{sys.path} i keš modula:
+\begin{code}
+sys.path[:] = [p for p in sys.path if p not in ("", _SELF, _SRC)]
+sys.path.append(_SRC)   # 'src' ide na KRAJ (da se 'baseline' i dalje nađe)
+# + izbaci eventualno već uvezen lokalni 'transformers' iz sys.modules
+\end{code}
+
+\textbf{Tokenizacija za transformer} je drugačija od baseline-a: koristi se
+\emph{subword} tokenizator samog modela (\kod{AutoTokenizer}), sa odsecanjem na
+\kod{max\_len}. Za svaki fold pravi se \emph{svež} model i trenira tačno $n$ epoha:
+\begin{code}
+tokenizer = AutoTokenizer.from_pretrained(hf_id)
+model = AutoModelForSequenceClassification.from_pretrained(hf_id, num_labels=2)
+\end{code}
+
+\begin{teorija}[ --- subword tokenizacija i hiperparametri obuke]
+\textbf{Subword tokenizacija} deli reč na česte pod-delove (npr.\ \kod{pobedom}$\to$
+\kod{pobed}+\kod{\#\#om}). Time model nema „nepoznatih reči'': svaku, i retku, sastavi
+od delova --- posebno korisno za morfološki bogat srpski. Zato ovde \emph{ne} radimo
+stemovanje: model sam uči podreči. Ključni hiperparametri obuke:
+\begin{itemize}[nosep]
+  \item \textbf{Broj epoha} (2/3/4) --- koliko puta model prođe ceo trening skup.
+    Premalo $\Rightarrow$ ne nauči (podprilagođavanje); previše $\Rightarrow$ zapamti
+    trening (overfitting). Zato \emph{variramo} i biramo: 3--4 je optimum (kriva učenja
+    se izravna).
+  \item \textbf{\kod{max\_len}} --- maksimalna dužina u tokenima; naslovi su kratki pa
+    se gotovo ništa ne odseca, a računanje je brže.
+  \item \textbf{\kod{batch\_size}} --- koliko primera ide kroz model pre ažuriranja
+    težina; veći batch = stabilnije, ali traži više GPU memorije.
+  \item \textbf{\kod{learning\_rate}} --- veličina koraka pri učenju; za fine-tuning je
+    mali (npr.\ $2\!\cdot\!10^{-5}$) da se ne „pokvari'' predtrenirano znanje.
+\end{itemize}
+\textbf{Zašto svež model po fold-u:} da svaki fold bude nezavisan eksperiment, bez
+prenosa naučenog iz prethodnog (inače curenje informacija).
+\end{teorija}
+
+\textbf{ROC-AUC} se dobija \emph{softmax}-om nad logitima (verovatnoća klikbejt klase):
+\begin{code}
+proba = softmax(logits)[:, 1]   # za roc_auc_score
+\end{code}
+\begin{teorija}[ --- logiti i softmax]
+Model na izlazu daje \emph{logite} --- sirove brojeve za svaku klasu, koji nisu
+verovatnoće. \textbf{Softmax} ih pretvara u verovatnoće (pozitivne, sabiraju se u 1).
+Uzimamo verovatnoću klase 1 (klikbejt) da bismo mogli da računamo ROC-AUC, koji traži
+rangiranje po verovatnoći, a ne samo tvrdu odluku.
+\end{teorija}
+
+\textbf{Izlaz:} \kod{results/encoder\_bertic\_results.csv},
+\kod{encoder\_mbert\_results.csv}. Najbolje: BERTić, 3--4 epohe (F1$\approx$0,703,
+ROC-AUC$\approx$0,788). \fajl{colab\_train.py} je verzija prilagođena Colab okruženju.
+
+% ===========================================================================
+\section{Faza 3c --- Dekoderski LLM (\texttt{src/decoder/})}
+
+\subsection{\texttt{prompts.py} --- konstrukcija upita}
+Definiše prompt varijante koje se porede: jezik (SR/EN) $\times$ format
+(zero/few-shot) $\times$ sa/bez definicije klikbejta. \kod{build\_prompt} sklapa
+\kod{(system, user\_template)}; ključno je da se od modela traži \textbf{samo cifra}:
+\begin{code}
+rule = "Odgovori ISKLJUČIVO jednom cifrom: 1 (klikbejt) ili 0 (regularan)."
+user = f'{task}\n\n{definicija}{examples}Naslov: "{{naslov}}"\nOdgovor:'
+\end{code}
+Few-shot varijante ubacuju 6 rešenih primera (\kod{FEWSHOT}); ti naslovi se po potrebi
+izuzimaju iz evaluacije (holdout) da ne bi „procurili''.
+
+\begin{teorija}[ --- zero-shot vs few-shot, uloga definicije]
+\textbf{Zero-shot} = modelu damo samo zadatak, bez ijednog rešenog primera --- oslanja
+se isključivo na znanje iz predtreniranja. \textbf{Few-shot} = u prompt ubacimo
+nekoliko rešenih primera (ovde 6) iz kojih model „na licu mesta'' nauči obrazac
+(\emph{in-context learning}), bez menjanja težina. Zato few-shot primeri \emph{ne} smeju
+biti u test skupu --- inače merimo memorisanje, ne generalizaciju (otud \emph{holdout}).
+\textbf{Definicija klikbejta} u promptu je treći faktor: usmerava model na \emph{naše}
+shvatanje pojma. Sve tri ose (jezik, broj primera, definicija) variramo da vidimo šta
+najviše pomaže --- to je „prompt inženjering'' kao zamena za obuku.
+\end{teorija}
+
+\subsection{\texttt{claude\_eval.py} --- evaluacija nad celim skupom}
+Šalje svaki naslov Anthropic Claude-u (Haiku), zero-shot, i parsira 0/1 odgovor.
+\kod{max\_tokens=16} jer je odgovor jedna cifra (jeftino i brzo):
+\begin{code}
+resp = client.messages.create(model=model, max_tokens=16,
+        system=system, messages=[{"role": "user", "content": user_prompt}])
+\end{code}
+\begin{teorija}[ --- zašto \kod{max\_tokens=16} i bez \emph{temperature}]
+\kod{max\_tokens} ograničava dužinu odgovora; pošto tražimo samo cifru 0/1, 16 je
+sasvim dovoljno i \emph{jeftinije} (plaća se po tokenu). \emph{Temperature} kontroliše
+nasumičnost generisanja --- za klasifikaciju želimo \emph{determinističan}, ponovljiv
+odgovor, pa je ne dižemo (na nekim modelima bi je slanje čak odbilo). Sistemski prompt
+izričito traži samo cifru da bi parsiranje (\kod{parse\_label}) bilo pouzdano.
+\end{teorija}
+
+\textbf{Tri inženjerska detalja} koja čine evaluaciju pouzdanom i jeftinom:
+\begin{enumerate}[nosep]
+  \item \textbf{Keširanje} (\kod{results/decoder\_cache/*.jsonl}) --- svaki rezultat se
+    upiše; ponovno pokretanje preskače već klasifikovane naslove (prekid/nastavak bez
+    dvostrukog plaćanja).
+  \item \textbf{Retry sa eksponencijalnim odlaganjem} --- na privremenu grešku/rate
+    limit pokušava do 5 puta (\kod{2**attempt}).
+  \item \textbf{Ograničavanje učestalosti} (\kod{min\_interval}) --- razmak između
+    poziva, da se ne probije API limit.
+\end{enumerate}
+
+\textbf{Izlaz:} \kod{results/decoder\_results.csv} + log. Najviši F1 na klikbejt klasi
+u celom radu ($\approx$0,715), ali samo tvrde 0/1 odluke (bez ROC-AUC).
+\fajl{gemini\_eval.py} i \fajl{chatgpt\_eval.py} su alternativni dekoderi (dele keš i
+parsiranje).
+
+% ===========================================================================
+\section{Faza 4 --- Izveštaj (\texttt{src/report/} + \texttt{report/})}
+
+\subsection{\texttt{make\_tables.py} --- CSV $\to$ LaTeX tabele}
+Čita \kod{results/*.csv} i piše \kod{booktabs} tabele spremne za \kod{\textbackslash
+input} u izveštaj (\kod{report/tables/}). Bira najbolju varijantu po tipu modela za
+zbirnu tabelu poređenja. Otporno na nedostajuće ulaze --- ako CSV ne postoji, upiše
+placeholder da se izveštaj svejedno kompajlira.
+
+\subsection{\texttt{make\_figures.py} --- grafici}
+\kod{matplotlib} grafici: raspodela klasa (bar), histogram dužine naslova po klasi,
+kriva učenja (F1/AUC po epohi) i poređenje modela. Svaki se snima kao PNG (150 dpi) u
+\kod{report/figures/}.
+
+\subsection{\texttt{izvestaj.tex} --- glavni dokument}
+LaTeX izveštaj (pdfLaTeX / tectonic); \kod{\textbackslash input}-uje generisane tabele
+i uključuje grafike. Komajlira se u \kod{report/izvestaj.pdf}. Bibliografija je u
+\kod{references.bib}.
+
+% ===========================================================================
+\section{Kako sve teče zajedno (reprodukcija)}
+Ceo lanac, ukratko (pune komande sa očekivanim izlazom su u
+\texttt{docs/Komande.md}):
+\begin{enumerate}[nosep]
+  \item \kod{sportklub\_api.py} $\to$ sirovi naslovi.
+  \item \kod{make\_splits.py} $\to$ (ručna anotacija) $\to$ \kod{iaa.py} (kappa) $\to$
+    \kod{build\_dataset.py} $\to$ \kod{dataset.tsv}.
+  \item \kod{run\_baseline.py}, \kod{finetune.py}, \kod{claude\_eval.py} $\to$
+    \kod{results/*.csv}.
+  \item \kod{make\_tables.py} + \kod{make\_figures.py} $\to$ \kod{tectonic
+    izvestaj.tex} $\to$ \textbf{PDF}.
+\end{enumerate}
+
+\vspace{2mm}\hrule\vspace{2mm}
+\noindent\textit{Prateći dokumenti:} \texttt{docs/Mapa-koda.md} (kratka mapa),
+\texttt{docs/Obrada-teksta.md} (tokenizacija/stemovanje/lematizacija detaljno),
+\texttt{docs/Komande.md} (komande + očekivani izlaz).
+
+\end{document}

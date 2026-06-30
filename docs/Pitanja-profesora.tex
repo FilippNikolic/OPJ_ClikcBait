@@ -1,0 +1,363 @@
+% ============================================================================
+%  Moguća pitanja na odbrani + odgovori — Detekcija klikbejt naslova (OPJ)
+%  Kompajliranje:  tectonic Pitanja-profesora.tex
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{fontspec}
+\setmonofont{lmmono10-regular.otf}[BoldFont=lmmonolt10-bold.otf]
+\usepackage[serbian]{babel}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[most]{tcolorbox}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=blue}
+
+\newtcolorbox{pitanje}[1]{
+  colback=orange!8, colframe=orange!55!black, fonttitle=\bfseries,
+  coltitle=black, title={Pitanje #1}, boxrule=0.5pt, breakable,
+  left=5pt, right=5pt, top=3pt, bottom=3pt}
+
+\newcommand{\kod}[1]{\texttt{#1}}
+\newcommand{\odg}{\smallskip\noindent\textbf{Odgovor.}\ }
+
+\title{\textbf{Odbrana --- moguća pitanja i odgovori}\\[2pt]
+\large Detekcija klikbejt naslova u sportskim vestima na srpskom jeziku}
+\author{Filip Nikolić (25/3234), Danilo Nikolić (25/3235)}
+\date{Obrada prirodnih jezika 2025/2026 --- ETF}
+
+\begin{document}
+\maketitle
+
+\noindent
+Ovaj dokument sadrži \textbf{27 pitanja} kakva profesor može postaviti na odbrani, sa
+opširnim odgovorima, poređanih \emph{hronološki} --- onako kako teče projekat (od
+definicije problema i izvora podataka, preko anotacije i saglasnosti, do modela i
+zaključka). Cilj je da pokaže da smo zaista radili na svakom koraku i da razumemo
+i \emph{šta} i \emph{zašto} smo uradili.
+
+% ===========================================================================
+\section{Uvod i definicija problema}
+
+\begin{pitanje}{1 --- Koja je tema i šta tačno rešavate?}
+Šta je cilj vašeg projekta?
+\end{pitanje}
+\odg Tema je \textbf{binarna klasifikacija sportskih naslova na srpskom jeziku} na dve
+klase: \emph{klikbejt} (oznaka 1) i \emph{regularan} (oznaka 0). Klikbejt je naslov
+oblikovan da navede čitaoca na klik manipulacijom, a ne poštenim saopštavanjem vesti.
+Cilj je da napravimo i \emph{uporedimo} tri porodice modela --- klasične linearne
+klasifikatore, fino podešene enkoderske transformere i dekoderski (generativni) model
+bez obuke --- i utvrdimo koji najbolje hvata suptilni klikbejt. Sport smo izabrali jer
+se rutinski događaji (transferi, izjave, rezultati) lako pakuju kao senzacija, pa je
+domen bogat klikbejtom.
+
+\begin{pitanje}{2 --- Kako definišete klikbejt? Po čemu znate da naslov jeste/nije?}
+Koje mehanizme manipulacije razlikujete?
+\end{pitanje}
+\odg Naslov ocenjujemo \emph{sam za sebe}, kako ga čitalac vidi u listi vesti, bez
+otvaranja članka. Vodeće pitanje: da li naslov \emph{namerno} manipuliše --- uskraćivanjem
+informacije, preuveličavanjem ili veštačkom emocijom. Razlikujemo četiri mehanizma:
+\begin{itemize}[nosep]
+  \item \textbf{KJ --- kognitivni jaz:} izostavljena ključna informacija
+    („Real ozvaničio veliko pojačanje'' --- ne kaže koga).
+  \item \textbf{PV --- preuveličavanje važnosti:} rutinski događaj kao senzacija
+    („Bomba iz Italije'' za običan transfer).
+  \item \textbf{EN --- veštački emocionalni naboj:} napetost/ogorčenje koje ne
+    proizlazi iz vesti („Skandal u Parizu'').
+  \item \textbf{SF --- senzacionalistička fraza / otvorena forma:} tri tačke,
+    retorička pitanja, „nećete verovati''.
+\end{itemize}
+Za oznaku 1 dovoljan je \emph{jedan} mehanizam. Nasuprot tome, uzvičnik, velika slova
+ili stvarno velika vest rečena direktno \emph{ne} čine klikbejt. Ključni test: ako
+posle čitanja naslova znaš šta se desilo --- verovatno je regularan.
+
+% ===========================================================================
+\section{Faza 1 --- Prikupljanje podataka}
+
+\begin{pitanje}{3 --- Odakle su podaci i zašto samo jedan izvor, kad je u prijavi bilo tri?}
+U prijavi su bili Mozzart, SportKlub i B92.
+\end{pitanje}
+\odg Podaci su sa portala \textbf{SportKlub}. Svesno smo se opredelili za \emph{jedan}
+izvor i to obrazlažemo: postavka traži jedan tematski domen (sportske vesti), a ne
+određeni broj izvora. Time što \emph{obe} klase (i klikbejt i regularan) dolaze sa
+istog portala, model uči stvarni \emph{klikbejt signal}, a ne stil portala. Da smo
+klikbejt vukli sa jednog, a regularne sa drugog sajta, model bi mogao da nauči da
+razlikuje portale umesto klikbejta --- to bi bila skrivena pristrasnost. Dakle, jedan
+izvor je ovde metodološki čistiji, a ne lenji izbor.
+
+\begin{pitanje}{4 --- Kako ste tehnički prikupili naslove?}
+Da li ste „grebali'' HTML?
+\end{pitanje}
+\odg Nismo parsirali HTML, već smo koristili zvanični \textbf{WordPress REST API}
+portala (\kod{/wp-json/wp/v2/posts}), koji vraća čist naslov, datum i kategorije u
+JSON-u --- pouzdanije od grebanja stranica. Skripta
+(\kod{src/scraping/sportklub\_api.py}) ide stranicu po stranicu (po 100 naslova), uz
+pauzu između zahteva da ne preoptereti server. Za svaki naslov beležimo metapodatke:
+jedinstveni id, tekst, izvor, \emph{URL članka}, datum objave, rubriku i datum
+prikupljanja --- čime je ispunjen zahtev da se zabeleži URL/identifikator izvora.
+Naslovi dolaze sa HTML entitetima (npr.\ \kod{\&\#8220;}) pa ih dekodiramo.
+
+\begin{pitanje}{5 --- Koliko ste podataka prikupili i kako ste dobili balansiranih 1100/1100?}
+Zašto baš balansiran skup?
+\end{pitanje}
+\odg Namerno smo prikupili \emph{višak} (3000--4000 naslova) da bismo posle anotacije
+mogli da izbalansiramo skup. Nad sirovim podacima radimo \textbf{deduplikaciju}:
+egzaktnu (identičan tekst) i \emph{približnu} (near-duplicate, biblioteka
+\kod{rapidfuzz}) da uklonimo gotovo iste naslove. Finalni skup je balansiran na
+\textbf{2200 naslova (1100 klikbejt / 1100 regularan)}, deterministički (seed 42),
+sačuvan kao \kod{dataset.tsv}. Balansiranje uklanja pristrasnost klasifikatora ka
+većinskoj klasi i pojednostavljuje tumačenje metrika (npr.\ tačnost od 50\,\% je
+slučaj, sve iznad je signal).
+
+% ===========================================================================
+\section{Faza 2 --- Anotacija i saglasnost}
+
+\begin{pitanje}{6 --- Ko je anotirao i kako ste podelili posao?}
+Kako ste obezbedili da merite saglasnost?
+\end{pitanje}
+\odg Anotirala su \emph{dva} člana tima, nezavisno. Skup smo podelili tačno na pola
+(deterministički, seed 42). Da bismo mogli da izmerimo saglasnost, izdvojili smo
+\textbf{kalibracioni skup od 220 naslova} (po 110 iz svake polovine) koje su anotirala
+\emph{oba} člana --- pa za tih 220 imamo dve nezavisne oznake i možemo da uporedimo.
+Anotaciju vodi pisano uputstvo (\kod{annotation/guidelines.md}) sa definicijama
+mehanizama i rešenim graničnim primerima.
+
+\begin{pitanje}{7 --- Šta je međuanotatorska saglasnost i zašto kappa, a ne prost procenat slaganja?}
+\end{pitanje}
+\odg Međuanotatorska saglasnost meri koliko se dva anotatora slažu --- pokazatelj da
+je zadatak dobro definisan i oznake pouzdane. Koristimo \textbf{Cohen's kappa} jer
+\emph{prost procenat slaganja precenjuje} kvalitet: ako oba anotatora često biraju istu
+klasu, slučajno će se složiti i bez ikakvog „znanja''. Kappa oduzima to \emph{očekivano
+slaganje slučajem} ($P_e$) i normira ostatak:
+$\kappa=\frac{P_o-P_e}{1-P_e}$. Tako $\kappa=1$ je savršeno slaganje, $\kappa=0$ je „kao
+slučaj''. Kappa je standard upravo zato što meri slaganje koje se \emph{ne može}
+objasniti pukom raspodelom klasa.
+
+\begin{pitanje}{8 --- Kolika je vaša kappa i kako je tumačite?}
+\end{pitanje}
+\odg Postigli smo \textbf{$\kappa = 0{,}640$} (procentualno slaganje 82,7\,\%, tj.\
+182/220). Po Landis--Kohovoj skali to je opseg \emph{„značajne/dobre''} saglasnosti
+(0,61--0,80) i prelazi našu internu ciljanu granicu $\kappa \ge 0{,}6$. Brojku
+prijavljujemo kao meru \emph{nezavisne} saglasnosti, pre adjudikacije.
+
+\begin{pitanje}{9 --- Vaša kappa je prihvatljiva, ali daleko od idealne; za binarne oznake sve ispod 0,8 nije sjajno. Zašto?}
+Ovo je profesorova konkretna primedba.
+\end{pitanje}
+\odg Slažemo se --- $0{,}640$ je dobar, ali ne idealan rezultat, i to je posledica
+\emph{suštine zadatka}, a ne nemarne anotacije. Tri razloga: (1) \textbf{Klikbejt je
+inherentno subjektivan, gradijentan pojam} --- granica između „živopisnog'' i
+„manipulativnog'' naslova je kontinuum; i u literaturi se za klikbejt prijavljuje
+umerena saglasnost. (2) \textbf{Pomeraj praga je dosledan i jednosmeran}: u 25 od 38
+neslaganja (66\,\%) jedan anotator vidi klikbejt tamo gde drugi vidi regularan, i to u
+\emph{istom} smeru --- jedan je sistematski blaži prag. Da je neslaganje bilo nasumično,
+kappa bi bila mnogo niža; ovako se razlaz svodi na kalibraciju \emph{jednog} praga.
+(3) \textbf{Granica je semantička, ne površinska} --- slažemo se na svim jasnim
+slučajevima, a razilazimo se samo na suptilnom, „blago senzacionalnom'' sloju, gde i
+ljudski sud prirodno varira.
+
+\begin{pitanje}{10 --- Na koje ste konkretne problematične slučajeve nailazili i kako ste ih rešavali?}
+\end{pitanje}
+\odg Izdvojili smo tri ponavljajuća sporna obrasca i za svaki uveli \emph{operativno
+pravilo} (upisano u uputstvo):
+\begin{enumerate}[nosep]
+  \item \textbf{Emotivni epitet bez tvrde manipulacije} („Sedmica za istoriju'',
+    „Siner šokantno ispao'', „Kakva golčina!''). Pravilo: epitet \emph{sam po sebi}
+    nije dovoljan za oznaku 1 --- mora ga pratiti preuveličavanje (PV) ili uskraćivanje
+    (KJ); inače je 0.
+  \item \textbf{Najava „otkrića'' / teaser} („Lazić otkrio: čuo sam da me je Dule
+    želeo''). Pravilo: teaser je klikbejt \emph{samo ako} namerno uskraćuje ključnu
+    informaciju; ako je suština prisutna --- 0.
+  \item \textbf{„Bomba/Šok/Skandal'' + delom data informacija} („Bomba: Diđa odlazi u
+    KTM''). Pravilo: ako je vest stvarno velika i suština rečena --- 0; ako je
+    preuveličavanje očigledno --- 1. Test: da li je emocija \emph{veštačka}.
+\end{enumerate}
+Dodali smo i konvencije: prefiksi \kod{(VIDEO)}/\kod{(FOTO)} su neutralni; uzvičnik i
+velika slova sami po sebi nisu klikbejt.
+
+\begin{pitanje}{11 --- Kako ste rešili neslaganja u finalnom skupu?}
+\end{pitanje}
+\odg Spornih (preklapajućih) naslova iz kalibracije bilo je 38 i njih smo rešili
+\textbf{adjudikacijom} --- kroz zajedničku diskusiju usaglasili smo labelu koja je
+ušla u finalni skup. Zato je finalni skup \emph{kvalitetniji} od same brojke
+$\kappa=0{,}640$: ta brojka opisuje \emph{nezavisnu} saglasnost pre dogovora, a u
+finalni skup su sva neslaganja naknadno razrešena konsenzusom.
+
+% ===========================================================================
+\section{Pretprocesiranje teksta}
+
+\begin{pitanje}{12 --- Kako radite tokenizaciju teksta?}
+\end{pitanje}
+\odg Pre tokenizacije tekst Unicode-normalizujemo (NFC), transliterujemo eventualnu
+ćirilicu u latinicu i prevodimo u mala slova. Zatim \textbf{tokenizujemo} regularnim
+izrazom: token je neprekinut niz \emph{slova} (uključujući srpske dijakritike
+\kod{ž ć č đ š}) i \emph{cifara}; interpunkcija i razmaci su razdvajači i podrazumevano
+se uklanjaju. Npr.\ „Partizan pobedio 2:1!'' $\to$
+\kod{[partizan, pobedio, 2, 1]}. Vektorizator (\kod{scikit-learn}) dobija već
+tokenizovan tekst i samo deli po razmaku, pa ne tokenizuje dvaput.
+
+\begin{pitanje}{13 --- Šta je stemovanje i kako ste ga implementirali?}
+\end{pitanje}
+\odg Stemovanje svodi reč na \emph{osnovu} mehaničkim sečenjem nastavaka (osnova ne
+mora biti prava reč). Napisali smo \textbf{lagani heuristički stemer bez zavisnosti}:
+imamo listu poznatih srpskih nastavaka (imenički, pridevski, glagolski), sortiranu od
+najdužeg ka najkraćem, i za token uklanjamo prvi nastavak koji se poklopi
+(pohlepno, \emph{longest-match}), uz zaštitu da osnova ne padne ispod 3 slova i da se
+cifre ne diraju. Cilj je morfološka normalizacija: „pobeda/pobede/pobedom'' $\to$
+ista osnova, čime se smanjuje raštrkanost vokabulara (srpski je morfološki bogat).
+
+\begin{pitanje}{14 --- Šta je lematizacija i po čemu se razlikuje od stemovanja?}
+\end{pitanje}
+\odg Lematizacija takođe svodi reč na osnovni oblik, ali na \textbf{lemu} --- pravu
+rečničku reč --- koristeći gramatičko znanje (vrstu reči, POS). Za to koristimo
+biblioteku \textbf{classla} sa modelom za srpski (procesori \kod{tokenize,pos,lemma}).
+Razlika: stem je brza heuristika koja može pogrešiti i daje osnovu koja ne mora biti
+reč; lematizacija je morfološki ispravna, hvata i nepravilne oblike (npr.\ „najbolji''
+$\to$ „dobar'', „igrača'' $\to$ „igrač''), ali traži model i sporija je. Obe tretiramo
+kao \emph{varijantu} i empirijski poredimo.
+
+\begin{pitanje}{15 --- Zašto je normalizacija reči bitna baš za srpski?}
+\end{pitanje}
+\odg Klasični modeli vide tekst kao \emph{vreću reči}, gde je svaka reč zasebno
+obeležje. Srpski ima izraženu fleksiju (padeži, rod, broj, vremena), pa isti pojam ima
+desetine oblika. Bez normalizacije model svaki oblik uči zasebno, signal se
+\emph{raspršuje} po mnogo retkih kolona i brzo ponestane primera po obeležju
+(problem retkosti). Stemovanje i lematizacija sažimaju oblike u jednu osnovu --- manje
+dimenzija, gušća obeležja, bolja generalizacija.
+
+% ===========================================================================
+\section{Faza 3a --- Osnovni modeli}
+
+\begin{pitanje}{16 --- Koje osnovne modele koristite i zašto baš njih?}
+\end{pitanje}
+\odg Koristimo \textbf{multinomijalni naivni Bajes} i \textbf{logističku regresiju}.
+Naivni Bajes je verovatnosni klasifikator koji pretpostavlja nezavisnost reči
+(otud „naivni''); brz je i jak na kratkom tekstu, klasičan baseline za klasifikaciju.
+Logistička regresija je linearni model koji uči težinu svake reči i daje dobro
+kalibrisane verovatnoće, bez pretpostavke nezavisnosti. Dva komplementarna pristupa
+daju pošteniju „donju granicu'' koju transformeri treba da nadmaše.
+
+\begin{pitanje}{17 --- Šta su TF, IDF i TF-IDF i zašto ih poredite?}
+\end{pitanje}
+\odg To su sheme \emph{ponderisanja} reči. \textbf{TF} (term frequency) = koliko se reč
+javlja u naslovu. \textbf{IDF} (inverse document frequency, $\log(N/df)$) = reč koja je
+u skoro svakom naslovu („je'', „u'') nosi malo informacije i dobija malu težinu, a
+retka/specifična reč veliku. \textbf{TF-IDF} = TF $\times$ IDF, visoko vrednuje reč
+\emph{čestu u ovom} naslovu a \emph{retku u korpusu} (diskriminativnu). Poredimo ih jer
+na \emph{kratkim} naslovima reči se retko ponavljaju, pa TF$\approx$prisustvo --- hteli
+smo empirijski da vidimo koliko IDF i sublinearno skaliranje uopšte pomažu (pokazalo se:
+malo, razlike su male).
+
+\begin{pitanje}{18 --- Šta su hiperparametri C i alpha i kako ste ih birali?}
+Ovo je čest „dublji'' pitanje.
+\end{pitanje}
+\odg \textbf{C (logistička regresija)} kontroliše \emph{regularizaciju} --- kaznu za
+prevelike težine. Malo C $\Rightarrow$ jaka kazna $\Rightarrow$ jednostavniji model,
+manje preprilagođavanja, ali rizik od podprilagođavanja; veliko C $\Rightarrow$ slaba
+kazna $\Rightarrow$ model se pripije uz trening (overfitting). \textbf{alpha (naivni
+Bajes)} je \emph{Laplace/aditivno izglađivanje}: dodaje malu pseudo-frekvenciju svakoj
+reči da nijedna verovatnoća ne bude nula (jer bi jedna nula poništila ceo proizvod
+verovatnoća). Oba biramo \emph{validacijom}, tražeći po \emph{log-skali}
+($C\in\{0{,}01\dots100\}$, $\alpha\in\{0{,}01\dots2\}$) jer im je efekat multiplikativan
+--- korak $\times10$ pokriva prostor efikasnije od $+1$. Izbor radi unutrašnja petlja
+ugnežđene unakrsne validacije.
+
+\begin{pitanje}{19 --- Šta je unakrsna validacija i zašto baš ugnežđena (nested)?}
+\end{pitanje}
+\odg \textbf{Unakrsna validacija} deli skup na 10 delova; 10 puta trenira na 9 a testira
+na 1, pa usrednji --- tako se meri na svim podacima, ne na jednom srećnom razdvajanju.
+\textbf{Stratifikovana} je da svaki fold čuva odnos klasa 50/50. \textbf{Ugnežđena} je
+da bismo \emph{pošteno} izveštavali: hiperparametre bira \emph{unutrašnja} petlja samo
+na trening delu, a \emph{spoljna} petlja ocenjuje na fold-u koji pri izboru nije viđen.
+Da koristimo jednu petlju za izbor i izveštaj, „provirili'' bismo u test i dobili lažno
+bolji rezultat.
+
+\begin{pitanje}{20 --- Kako sprečavate curenje informacija pri pretprocesiranju?}
+\end{pitanje}
+\odg Stemovanje i lematizacija su \emph{deterministički po tokenu} (ne uče se iz
+podataka), pa ih radimo jednom nad celim skupom bez rizika. Ono što \emph{jeste}
+naučeno --- vokabular i IDF težine vektorizatora --- stavili smo unutar
+\kod{Pipeline}-a, pa se uče \emph{isključivo} na trening delu svakog fold-a, nikad na
+test delu. Tako test fold ostaje zaista neviđen.
+
+\begin{pitanje}{21 --- Koji je najbolji baseline rezultat i šta iz njega zaključujete?}
+\end{pitanje}
+\odg Najbolja varijanta je \textbf{naivni Bajes + stemovanje + TF-IDF (1--2 grami)}, sa
+F1 na klikbejt klasi $\approx 0{,}646$ i ROC-AUC $\approx 0{,}676$. Stemovanje pomaže
+(smanjuje morfološku raštrkanost), dok IDF i bigrami donose tek malo. Glavni zaključak:
+vreća reči hvata površinske leksičke obrasce, ali teško prepoznaje suptilni klikbejt
+koji zavisi od konteksta --- što motiviše prelazak na kontekstualne modele.
+
+% ===========================================================================
+\section{Faza 3b --- Enkoderski modeli}
+
+\begin{pitanje}{22 --- Šta je BERT, koja je razlika enkoder/dekoder i šta je fine-tuning?}
+\end{pitanje}
+\odg \textbf{Transformer} preko mehanizma \emph{pažnje} za svaku reč gleda kontekst, pa
+ista reč dobija različitu reprezentaciju zavisno od okoline (kontekstualni model).
+\textbf{Enkoder} (BERT) je predtreniran da \emph{razume} tekst --- uči pogađajući
+zamaskiranu reč gledajući i levo i desno --- i idealan je za klasifikaciju.
+\textbf{Dekoder} (GPT, Claude) je predtreniran da \emph{generiše} (predviđa sledeću
+reč). \textbf{Fine-tuning} je kratko doučavanje već predtreniranog modela na našem
+malom označenom skupu, da opšte jezičko znanje usmerimo baš na klikbejt --- mnogo bolje
+nego učiti od nule.
+
+\begin{pitanje}{23 --- Zašto je BERTić bolji od mBERT-a?}
+\end{pitanje}
+\odg \textbf{BERTić} je monolingvalni model, treniran na srpskom i srodnim (BCMS)
+jezicima, pa sav kapacitet troši na njih i bolje hvata jezičke nijanse. \textbf{mBERT}
+je višejezični --- isti kapacitet deli na 100+ jezika --- pa je „rastegnut''. Zato
+BERTić nadmašuje mBERT na svim metrikama (F1 $\approx 0{,}703$, ROC-AUC do
+$0{,}788$ naspram mBERT-ovih nešto nižih), što potvrđuje vrednost jezički
+specijalizovanog modela.
+
+\begin{pitanje}{24 --- Kako birate broj epoha za fine-tuning?}
+\end{pitanje}
+\odg Broj epoha je koliko puta model prođe ceo trening skup. Premalo $\Rightarrow$ ne
+nauči (podprilagođavanje); previše $\Rightarrow$ zapamti trening (overfitting). Zato
+smo \emph{varirali} 2/3/4 epohe i merili: 2 epohe su nedovoljne, dok 3--4 daju najbolji
+i stabilan rezultat (kriva učenja se izravna), pa dalje obučavanje ne donosi dobitak.
+
+% ===========================================================================
+\section{Faza 3c --- Dekoderski model}
+
+\begin{pitanje}{25 --- Kako ste koristili Claude, šta znači zero-shot i zašto bez fine-tuninga?}
+\end{pitanje}
+\odg \textbf{Claude (Haiku)} je zatvoreni dekoderski model dostupan preko API-ja; ne
+možemo (ni ne treba) da ga fino podešavamo, pa ga koristimo u režimu \textbf{zero-shot}
+--- damo mu samo zadatak i definiciju klikbejta, \emph{bez ijednog} rešenog primera, i
+tražimo da odgovori samo cifrom 0/1. On se oslanja na znanje iz predtreniranja. To je i
+poenta poređenja: koliko model \emph{bez ikakve obuke na našim podacima} može da
+postigne. (U prijavi je naveden ChatGPT; postavka dozvoljava i druge dekoderske modele,
+pa smo uzeli Claude kao funkcionalno ekvivalentan.)
+
+\begin{pitanje}{26 --- Koje prompt varijante ste poredili i kako ste sprečili nepouzdanost?}
+\end{pitanje}
+\odg Poredili smo varijante po tri ose: \emph{jezik} prompta (srpski/engleski),
+\emph{format} (zero-shot vs few-shot) i \emph{sa/bez definicije} klikbejta. Razlika
+SR\,vs\,EN je zanemarljiva (F1 0,710 vs 0,715). Pouzdanost smo obezbedili tako što:
+sistemski prompt traži \emph{samo cifru} (lako parsiranje), \kod{max\_tokens} je mali
+(jeftino), ne koristimo \emph{temperature} (deterministički odgovor), a sve odgovore
+\emph{kešujemo} (prekid/nastavak bez dvostrukog plaćanja). Few-shot primere izuzimamo
+iz evaluacije (holdout) da ne bi „procurili''.
+
+% ===========================================================================
+\section{Poređenje, zaključak i ograničenja}
+
+\begin{pitanje}{27 --- Koji je model najbolji? Koja su ograničenja i šta biste dalje radili?}
+\end{pitanje}
+\odg \textbf{Nema jedinstvenog pobednika} --- i to je glavni nalaz. Po \emph{F1 na
+klikbejt klasi} vodi dekoderski Claude ($0{,}715$), ali po \emph{tačnosti} i
+kalibrisanim verovatnoćama (ROC-AUC) najbolji je BERTić ($0{,}704$ / $0{,}788$). Dekoder
+je najbolji \emph{kada nema podataka za obuku}; enkoder kada trebaju pouzdane
+verovatnoće i lokalno, besplatno izvršavanje. Za produkciju preporučujemo BERTić (mali,
+besplatan, lokalan, kalibrisan). \textbf{Metriku F1 na klikbejt klasi} naglašavamo jer
+je to klasa koju želimo da detektujemo, a sama tačnost može biti varljiva.
+\textbf{Ograničenja:} skup je relativno mali (2200), iz jednog domena i izvora; dekoder
+daje samo tvrde 0/1 odluke (bez AUC-a); evaluirane su dve glavne prompt varijante.
+\textbf{Dalji rad:} više domena i izvora, veći skup, few-shot i kalibracija dekodera,
+ansambl (BERTić + dekoder) i analiza tipova grešaka po podtipovima klikbejta
+(KJ/PV/EN/SF).
+
+\end{document}

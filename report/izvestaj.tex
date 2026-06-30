@@ -143,21 +143,89 @@ Neslaganja & 38 / 220 (17{,}3\,\%) \\
 \end{tabular}
 \end{table}
 
-Postignuti $\kappa = 0{,}640$ prelazi internu ciljanu granicu $\kappa \ge 0{,}6$ i
-spada u opseg \enquote{dobre} saglasnosti. Analiza neslaganja pokazuje
-\emph{dosledan, jednosmeran} pomeraj praga: u 25 od 38 neslaganja (66\,\%) jedan
-anotator je naslov video kao klikbejt, a drugi kao regularan, i to u istom smeru ---
-blaži senzacionalizam i emotivni epiteti (\enquote{za istoriju}, \enquote{šokantno})
-shvataju se različito strogo. Ovakav semantički (a ne površinski) pomeraj tipičan je
-za suptilne granične slučajeve i ne obara $\kappa$ ispod praga. Na osnovu ovih
-slučajeva uvedeno je operativno pravilo: emotivni epiteti sami po sebi nisu dovoljni
-za oznaku 1 --- moraju biti praćeni preuveličavanjem ili uskraćivanjem informacije.
+Matrica neslaganja (Filip $\times$ Danilo) data je u Tabeli~\ref{tab:konfuzija}.
+
+\begin{table}[H]\centering
+\caption{Matrica slaganja anotatora na kalibracionom skupu (220 naslova).}\label{tab:konfuzija}
+\begin{tabular}{lccc}
+\toprule
+ & Danilo = 0 & Danilo = 1 & $\Sigma$ Filip \\
+\midrule
+Filip = 0 & 114 & 13 & 127 \\
+Filip = 1 & \textbf{25} & 68 & 93 \\
+$\Sigma$ Danilo & 139 & 81 & 220 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Tumačenje saglasnosti}\label{sec:kappa}
+Po Landis--Kohovoj skali $\kappa = 0{,}640$ spada u opseg \enquote{značajne}
+(engl.\ \emph{substantial}, $0{,}61$--$0{,}80$) saglasnosti i prelazi našu internu
+ciljanu granicu $\kappa \ge 0{,}6$. Svesni smo, međutim, da za \emph{binarne} oznake
+u produkcionim primenama tek $\kappa \ge 0{,}8$ predstavlja zaista pouzdanu
+saglasnost; naš rezultat treba čitati kao \emph{dobar, ali ne idealan}. Smatramo da
+je ovaj nivo posledica suštinske osobine zadatka, a ne nemarne anotacije, iz tri
+razloga:
+\begin{itemize}
+  \item \textbf{Klikbejt je inherentno subjektivan, gradijentan pojam.} Granica
+    između \enquote{živopisnog} i \enquote{manipulativnog} naslova je kontinuum, a ne
+    oštra linija; i u literaturi se za klikbejt prijavljuje umerena saglasnost.
+  \item \textbf{Pomeraj praga je dosledan i jednosmeran}, što je vidljivo iz
+    Tabele~\ref{tab:konfuzija}: u \textbf{25 od 38} neslaganja (66\,\%) Filip vidi
+    klikbejt tamo gde Danilo vidi regularan naslov (a ne nasumično u oba smera).
+    Filip je sistematski blaži prag (93/220 klikbejt naspram Danilovih 81/220) ---
+    razlaz je u \emph{kalibraciji jednog praga}, ne u nerazumevanju pojma. Da je
+    neslaganje bilo nasumično, $\kappa$ bi bila znatno niža.
+  \item \textbf{Granica je semantička, ne površinska.} Anotatori se slažu na jasnim
+    slučajevima (jednomislili su o 182/220), a razilaze isključivo na suptilnom,
+    \enquote{blago senzacionalnom} sloju, gde i ljudski sud prirodno varira.
+\end{itemize}
+
+\subsection{Problematični slučajevi i njihovo rešavanje}\label{sec:sporni}
+Analizom 38 neslaganja izdvojili smo tri ponavljajuća obrasca koji su pravili najviše
+problema. Za svaki je, posle zajedničke diskusije, uvedeno \emph{operativno pravilo}
+koje je upisano u uputstvo (\texttt{annotation/guidelines.md}, odeljak 4--5) i
+primenjeno u glavnoj anotaciji (Tabela~\ref{tab:sporni}).
+
+\begin{table}[H]\centering
+\caption{Tipovi spornih slučajeva i usvojena pravila odlučivanja.}\label{tab:sporni}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{3cm} p{5.5cm} p{5.5cm}}
+\toprule
+\textbf{Obrazac} & \textbf{Primer (Filip=1 / Danilo=0)} & \textbf{Usvojeno pravilo} \\
+\midrule
+Emotivni / senzacionalni epitet bez tvrde manipulacije &
+\enquote{Sedmica \emph{za istoriju}}, \enquote{Siner \emph{šokantno} ispao}, \enquote{Kakva \emph{golčina}!} &
+Epitet sam po sebi \textbf{nije} dovoljan za oznaku 1; mora biti praćen
+preuveličavanjem (PV) ili uskraćivanjem informacije (KJ). Inače $\to$ 0. \\
+\midrule
+Najava \enquote{otkrića} / teaser (KJ?) &
+\enquote{Lazić \emph{otkrio}: Čuo sam da me je Dule želeo} &
+Teaser je klikbejt \textbf{samo ako} naslov namerno uskraćuje ključnu informaciju
+koja se mogla navesti. Ako je suština ipak prisutna $\to$ 0. \\
+\midrule
+\enquote{Bomba / Šok / Skandal} + (delom) data informacija &
+\enquote{Bomba: Diđa odlazi u KTM} &
+Ako je vest stvarno velika i suština rečena $\to$ 0; ako je preuveličavanje očigledno
+(rutinski događaj) $\to$ 1. Test: da li je emocija \emph{veštačka}. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Pored ovih pravila, usaglašene su i dve tehničke konvencije koje su uklonile deo
+neslaganja: prefiksi \texttt{(VIDEO)}/\texttt{(FOTO)} tretiraju se kao \emph{neutralni}
+(ne utiču na oznaku), a uzvičnik i velika slova \emph{sami po sebi} nisu klikbejt ako
+naslov i dalje pošteno prenosi vest. Granični primeri iz Tabele~\ref{tab:sporni}
+ostavljeni su u uputstvu kao referentni rešeni slučajevi, da bi anotacija ostala
+konzistentna.
 
 \subsection{Glavna anotacija}
-Posle kalibracije, preostali naslovi su podeljeni na pola i anotirani jednostruko.
-Preklapajući (sporni) naslovi iz kalibracije rešeni su \emph{adjudikacijom} ---
-usaglašena labela ušla je u finalni skup. Vrednost $\kappa = 0{,}640$ prijavljuje se
-kao mera \emph{nezavisne} saglasnosti, pre adjudikacije.
+Posle kalibracije i usvajanja gornjih pravila, preostali naslovi su podeljeni na pola
+i anotirani jednostruko. Preklapajući (sporni) naslovi iz kalibracije rešeni su
+\emph{adjudikacijom} --- kroz zajedničku diskusiju usaglašena labela ušla je u finalni
+skup. Vrednost $\kappa = 0{,}640$ prijavljuje se kao mera \emph{nezavisne} saglasnosti
+(pre adjudikacije); finalni skup je, dakle, kvalitetniji od te brojke jer su sva
+neslaganja naknadno razrešena konsenzusom.
 
 % ===========================================================================
 \section{Deskriptivna statistika skupa}\label{sec:stat}
@@ -190,13 +258,53 @@ Dekoderski model ocenjen je nad celim skupom (2200). Za sve modele izveštavaju 
 iste metrike: tačnost, preciznost/odziv/F1 sa fokusom na klikbejt klasu, makro-F1 i
 ROC-AUC (gde model daje verovatnoće).
 
+\subsection{Pretprocesiranje teksta: tokenizacija, stemovanje, lematizacija}\label{sec:pretprocesiranje}
+Pre vektorizacije, svaki naslov prolazi kroz lanac normalizacije implementiran u
+\texttt{src/preprocessing/serbian.py}. Detaljan opis svake tehnike sa primerima dat je
+u pratećem dokumentu \texttt{docs/Obrada-teksta.md}; ovde se sažima šta je primenjeno.
+
+\textbf{Osnovna normalizacija.} Tekst se Unicode-normalizuje (NFC), ćirilica se
+transliteruje u latinicu (SportKlub je latinični, ali radi robusnosti) i prevodi u
+mala slova. Time se \enquote{Zvezda} i \enquote{ZVEZDA} svode na isti token.
+
+\textbf{Tokenizacija.} Naslov se deli na tokene regularnim izrazom koji kao token
+prepoznaje neprekinut niz slova (uključujući srpske dijakritike \texttt{ž ć č đ š}) i
+cifara; interpunkcija i razmaci su \emph{razdvajači} i podrazumevano se uklanjaju
+(opciono se mogu zadržati kao zasebni tokeni). Tako npr.\ \enquote{Partizan pobedio
+2:1!} daje tokene \texttt{[partizan, pobedio, 2, 1]}. Vektorizator
+(\texttt{scikit-learn}) dobija već tokenizovan, razmakom razdvojen niz, pa samo deli po
+razmaku (\texttt{token\_pattern}=\texttt{\textbackslash S+}); $n$-grami (1--1 i 1--2) i
+prag \texttt{min\_df}=2 primenjuju se nad tim tokenima.
+
+\textbf{Stemovanje.} Koristi se \emph{lagani heuristički stemer} (suffix-stripping)
+napisan bez spoljnih zavisnosti: za svaki token se pohlepno (najduži-prvi) uklanja
+najduži poznati srpski nastavak (imenički padeži, pridevski/komparativni i glagolski
+nastavci), uz zaštitu da se osnova ne skrati ispod tri slova i da se cifre ne diraju.
+Cilj je morfološka normalizacija --- \enquote{pobedi}, \enquote{pobeda}, \enquote{pobedom}
+$\to$ ista osnova --- čime se smanjuje raštrkanost vokabulara (srpski je
+morfološki bogat). Pristup je svesno jednostavan i transparentan: ne zamenjuje pravi
+morfološki analizator, ali je dovoljan kao baseline-varijanta i nije skup.
+
+\textbf{Lematizacija.} Kao tačnija alternativa stemovanju koristi se biblioteka
+\texttt{classla}~\cite{ljubesic2018classla} sa modelom za srpski i procesorima
+\texttt{tokenize,pos,lemma}. Za razliku od stemera, lematizacija je
+\emph{morfološki ispravna} i POS-svesna: vraća rečničku osnovu (lemu) reči
+(\enquote{igrača} $\to$ \enquote{igrač}, \enquote{najbolji} $\to$ \enquote{dobar}),
+ali zahteva preuzimanje modela i sporija je. Tri varijante normalizacije
+(\texttt{none} / \texttt{stem} / \texttt{lemma}) tretiraju se kao hiperparametar čiji
+se efekat meri u baseline gridu (Odeljak~\ref{sec:baseline}).
+
+\textbf{Napomena o curenju informacija.} Pošto su stemovanje i lematizacija
+deterministički po tokenu (ne uče se iz podataka), pretprocesiranje se radi
+\emph{jednom} nad celim skupom; vokabular i IDF težine vektorizatora i dalje se uče
+isključivo \emph{unutar svakog fold-a}, pa nema curenja informacija u unakrsnoj
+validaciji. Stop-reči se, po preporuci profesora, \emph{ne} izbacuju.
+
 \subsection{Osnovni modeli (LR + Naivni Bajes)}\label{sec:baseline}
-Ispitan je grid varijanti: pretprocesiranje (bez / heuristički stemer / lematizacija),
-ponderisanje obeležja (TF / IDF / TF-IDF / puko brojanje) i opseg n-grama (1--1, 1--2).
-Implementacija se oslanja na \texttt{scikit-learn}~\cite{scikit-learn}, a lematizacija
-na \texttt{classla}~\cite{ljubesic2018classla}.
-Po preporuci profesora ne izbacuju se stop-reči; umesto toga oslanjamo se na
-TF/IDF/TF-IDF ponderisanje.
+Ispitan je grid varijanti: pretprocesiranje (bez / heuristički stemer / lematizacija,
+vidi Odeljak~\ref{sec:pretprocesiranje}), ponderisanje obeležja
+(TF / IDF / TF-IDF / puko brojanje) i opseg n-grama (1--1, 1--2). Implementacija se
+oslanja na \texttt{scikit-learn}~\cite{scikit-learn}.
 \inputIfExists{tables/baseline.tex}
 Najbolja varijanta je \textbf{multinomijalni naivni Bajes uz stemovanje i TF-IDF
 (1--2 grami)}, sa F1 na klikbejt klasi 0{,}646 i ROC-AUC 0{,}676. Razlike među
